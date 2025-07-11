@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#EE652B</color>
+    <color name="primary_hover">#D94F24</color>
+    <color name="primary_light">#26EE652B</color> <!-- 15% opacity -->
+    <color name="background">#F8F9FA</color>
+    <color name="background_secondary">#E4E7EB</color>
+    <color name="card_background">#FFFFFF</color>
+    <color name="text_primary">#1F2136</color>
+    <color name="text_secondary">#6A7280</color>
+    <color name="border">#D1D5DB</color>
+    <color name="success">#10B981</color>
+    <color name="error">#EF4444</color>
+    <color name="warning">#F59E0B</color>
+    <color name="warning_background">#FFF7ED</color>
+    <color name="warning_border">#FED7AA</color>
+    <color name="error_background">#FEF2F2</color>
+    <color name="error_border">#FECACA</color>
+    <color name="success_background">#F0FDF4</color>
+    <color name="success_border">#BBF7D0</color>
+</resources>

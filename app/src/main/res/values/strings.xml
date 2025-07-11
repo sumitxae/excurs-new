@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">CCP-Excursion-reader</string>
+    <string name="scan_device">scan devices</string>
+    <string name="device_connected">connected device</string>
+    <string name="device_connected_successfully">The device is connected successfully</string>
+
+    <string name="device_connecting">Connecting</string>
+    <string name="device_successfully">Connected Successfully</string>
+    <string name="device_fail">Connected Fail</string>
+    <string name="input_mac">Please enter MAC</string>
+    <string name="connected_device">Connect the device</string>
+    <string name="data_format_incorrect">The data format is incorrect</string>
+    <string name="disconnect">disconnect device</string>
+    <string name="device_current_state">Device Current State</string>
+    <string name="operation_by_connected">Operation after successful connection</string>
+    <string name="confirm">confirm</string>
+    <string name="only_support_bin">Only format upgrade packages with suffix bin are supported.</string>
+    <string name="file_select_error">Select file error</string>
+    <string name="loading">Loading</string>
+    <string name="set_secrt_key">config secret key</string>
+    <string name="mac_key">import mac-key</string>
+    <string name="clean_mac_key">clean mac-key</string>
+
+    <string name="need_permission_continue">APP needs following permissions to continue</string>
+    <string name="allow_permission_in_settings">Please allow following permissions in settings</string>
+</resources>
