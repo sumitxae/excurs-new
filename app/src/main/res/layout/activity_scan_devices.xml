@@ -57,7 +57,7 @@
                 android:layout_height="37dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_search_edittext"
-                android:hint="Enter Beacon ID"
+                android:hint="Search by MAC address or device name..."
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp"
                 android:textColor="@color/text_primary"
@@ -65,11 +65,26 @@
                 android:textSize="12sp"
                 android:inputType="text" />
             <Button
-                android:id="@+id/btn_search"
-                android:layout_width="72dp"
+                android:id="@+id/btn_clear_search"
+                android:layout_width="37dp"
                 android:layout_height="37dp"
                 android:layout_marginStart="8dp"
-                android:text="Search"
+                android:text="✕"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:background="@drawable/bg_search_edittext"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:paddingTop="0dp"
+                android:paddingBottom="0dp"
+                android:visibility="gone" />
+            <Button
+                android:id="@+id/btn_scan_qr"
+                android:layout_width="74dp"
+                android:layout_height="37dp"
+                android:layout_marginStart="8dp"
+                android:text="Scan QR"
                 android:textColor="@color/card_background"
                 android:textSize="12sp"
                 android:textStyle="bold"
@@ -89,7 +104,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/header_layout"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/device_details_card"
         >
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerView"
@@ -99,6 +114,188 @@
             />
 
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+    <!-- Device Details Card -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/device_details_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:visibility="gone"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="8dp"
+        app:cardBackgroundColor="@color/card_background"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <!-- Device Info Header -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="16dp">
+
+                <TextView
+                    android:id="@+id/tv_device_details_title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Device Details"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold"
+                    android:textSize="18sp" />
+
+                <Button
+                    android:id="@+id/btn_close_details"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="✕"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="16sp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:minWidth="32dp"
+                    android:minHeight="32dp" />
+            </LinearLayout>
+
+            <!-- Device Info Content -->
+            <LinearLayout
+                android:id="@+id/ll_device_info"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/tv_scan_device_mac"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="MAC: C3:00:00:30:18:F6"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/tv_scan_device_battery"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Battery: 100%"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/tv_scan_device_firmware"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Firmware: 3.2.4"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/tv_scan_connection_status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Status: Connecting..."
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"
+                    android:layout_marginBottom="16dp" />
+            </LinearLayout>
+
+            <!-- Historical Data Content -->
+            <LinearLayout
+                android:id="@+id/ll_historical_data"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Historical Data Analysis"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold"
+                    android:textSize="16sp"
+                    android:layout_marginBottom="12dp" />
+
+                <TextView
+                    android:id="@+id/tv_total_readings"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Total Readings: 0"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/tv_excursion_count"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Excursions: 0"
+                    android:textColor="@color/error"
+                    android:textSize="14sp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/tv_excursion_details"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="16dp" />
+
+                <Button
+                    android:id="@+id/btn_view_log_file"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="View Log File"
+                    android:textColor="@color/card_background"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:background="@drawable/bg_connect_button"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Loading State -->
+            <LinearLayout
+                android:id="@+id/ll_loading"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:visibility="gone">
+
+                <ProgressBar
+                    android:id="@+id/progress_bar"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginBottom="16dp"
+                    android:indeterminateTint="@color/primary" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Connecting..."
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
 
 
     <ImageButton

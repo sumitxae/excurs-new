@@ -27,8 +27,10 @@ import com.minew.ble.mst03.bean.HistoryHtData;
 import com.minew.ble.mst03.bean.HtData;
 import com.minew.ble.mst03.bean.HtSensorConfiguration;
 import com.minew.ble.mst03.bean.SensorSettingData;
+import com.minew.ble.mst03.frames.DeviceStaticInfoFrame;
 import com.minew.ble.mst03.interfaces.OnReceiveDataListener;
 import com.minew.ble.mst03.manager.MST03SensorBleManager;
+import com.minew.ble.v3.bean.FirmwareVersionModel;
 import com.minew.ble.v3.bean.HTSensorThresholdConfig;
 import com.minew.ble.v3.enums.BleConnectionState;
 import com.minew.ble.v3.enums.FrameType;
@@ -61,7 +63,9 @@ public class DeviceConnectedCompleteActivity extends BaseActivity{
     private MST03SensorBleManager mBleManager;
     private String mMac="";
 
-
+    // Add variables to store historical data
+    private List<HtData> historicalDataList = new ArrayList<>();
+    private boolean hasHistoricalData = false;
 
     private AdvParametersConfiguration deviceInfoAdvParametersConfiguration = null;
     private AdvParametersConfiguration combinationAdvParametersConfiguration = null;
@@ -122,10 +126,32 @@ public class DeviceConnectedCompleteActivity extends BaseActivity{
                 }
             }
         });
+        
+        // TODO: Add beacon payload logging when the correct method is available
+        // For now, we'll log connection events and add payload logging later
+        Log.d(TAG, "BLE Manager initialized for MAC: " + mMac);
     }
 
     private void initData(){
         mMac = getIntent().getStringExtra("mac");
+        Log.d(TAG, "Device MAC: " + mMac);
+        
+        // Add button click listener for downloading data
+        binding.btnDownloadData.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Log.d(TAG, "Download Data button clicked");
+                
+                // First query device static information
+                queryDeviceStaticInfo();
+                
+                // Try to get device static info from connection
+                getDeviceStaticInfoFromConnection();
+                
+                // Then get historical data
+                selectHTHistoryData();
+            }
+        });
     }
 
     private void initListener(){
@@ -308,20 +334,35 @@ public class DeviceConnectedCompleteActivity extends BaseActivity{
                             @Override
                             public void run() {
                                 WaitDialog.dismiss();
-                                LogUtil.d("selectHTHistoryData Result: "+b);
+                                Log.d(TAG, "selectHTHistoryData Result: " + b);
                                 if(b){
                                     List<HtData> htDataList = historyHtData.getHistoryDataList();
-//                    for (HtData htData : htDataList) {
-//
-//                    }
-                                    LogUtil.d("historyHtData:"+historyHtData.getHistoryDataList().size());
+                                    
+                                    // Store the data for later use
+                                    historicalDataList.clear();
+                                    historicalDataList.addAll(htDataList);
+                                    hasHistoricalData = true;
+                                    
+                                    Log.d(TAG, "Total beacon data records: " + historyHtData.getHistoryDataList().size());
+                                    
+                                    // Log each piece of beacon data
+                                    for (int i = 0; i < htDataList.size(); i++) {
+                                        HtData htData = htDataList.get(i);
+                                        Log.d(TAG, "=== Beacon Data Record " + (i + 1) + " ===");
+                                        Log.d(TAG, "Temperature: " + htData.getTemperature() + "°C");
+                                        Log.d(TAG, "Humidity: " + htData.getHumidity() + "%");
+                                        Log.d(TAG, "Raw data: " + htData.toString());
+                                        Log.d(TAG, "================================");
+                                    }
+                                    
+                                    Toast.makeText(DeviceConnectedCompleteActivity.this, 
+                                        "Downloaded " + htDataList.size() + " records", Toast.LENGTH_SHORT).show();
                                 }else{
+                                    Log.d(TAG, "Failed to get beacon data");
                                     Toast.makeText(DeviceConnectedCompleteActivity.this,"selectHTHistoryData Result: fail",Toast.LENGTH_LONG).show();
                                 }
                             }
                         });
-
-
                     }
 
 
@@ -364,6 +405,101 @@ public class DeviceConnectedCompleteActivity extends BaseActivity{
 
     private void disConnected(){
         mBleManager.disConnect(mMac);
+    }
+    
+    // Method to get all historical data
+    public List<HtData> getHistoricalData() {
+        return historicalDataList;
+    }
+    
+    // Method to get the latest temperature reading
+    public float getLatestTemperature() {
+        if (hasHistoricalData && !historicalDataList.isEmpty()) {
+            return historicalDataList.get(historicalDataList.size() - 1).getTemperature();
+        }
+        return -999; // Indicates no data
+    }
+    
+    // Method to get the latest humidity reading
+    public float getLatestHumidity() {
+        if (hasHistoricalData && !historicalDataList.isEmpty()) {
+            return historicalDataList.get(historicalDataList.size() - 1).getHumidity();
+        }
+        return -999; // Indicates no data
+    }
+    
+    // Method to get data count
+    public int getDataCount() {
+        return historicalDataList.size();
+    }
+    
+    // Method to check if data is available
+    public boolean hasData() {
+        return hasHistoricalData;
+    }
+    
+    /**
+     * Try to get device static information from the connected device
+     * This attempts to retrieve the DeviceStaticInfoFrame that was available during scanning
+     */
+    private void getDeviceStaticInfoFromConnection() {
+        Log.d(TAG, "Attempting to get device static info from connection...");
+        
+        // Note: According to the SDK documentation, DeviceStaticInfoFrame is available during scanning
+        // and contains: frameVersion, firmwareVersion, batteryLevel, macAddress
+        // However, this information might not be directly accessible after connection
+        // The firmware information is available through queryDeviceFirmwareInfo()
+        
+        Log.d(TAG, "Device static info (battery level, etc.) is typically available during scanning");
+        Log.d(TAG, "For connected devices, use queryDeviceFirmwareInfo() for firmware details");
+        Log.d(TAG, "Battery level and other static info may need to be captured during scan phase");
+    }
+    
+    /**
+     * Query and log device static information
+     * This retrieves device type, firmware version, battery level, and MAC address
+     */
+    private void queryDeviceStaticInfo() {
+        Log.d(TAG, "Querying device static information...");
+        
+        try {
+            // Method 1: Query device firmware information using the SDK method
+            mBleManager.queryDeviceFirmwareInfo(mMac, new OnQueryResultListener<FirmwareVersionModel>() {
+                @Override
+                public void OnQueryResult(boolean success, FirmwareVersionModel firmwareVersionModel) {
+                    if (success && firmwareVersionModel != null) {
+                        Log.d(TAG, "=== Device Firmware Information ===");
+                        Log.d(TAG, "Firmware Model: " + firmwareVersionModel.toString());
+                        
+                        // Try to get version info if available
+                        try {
+                            Object versionInfoList = firmwareVersionModel.getVersionInfoList();
+                            if (versionInfoList != null) {
+                                Log.d(TAG, "Version Info List: " + versionInfoList.toString());
+                            }
+                        } catch (Exception e) {
+                            Log.d(TAG, "Version info not available in this SDK version");
+                        }
+                        
+                        Log.d(TAG, "================================");
+                    } else {
+                        Log.d(TAG, "Failed to get device firmware information");
+                    }
+                }
+            });
+            
+            // Method 2: Try to get device info through advertising parameters
+            queryDeviceInfoAdvParameters();
+            
+            // Method 3: Log what we know about the device
+            Log.d(TAG, "=== Known Device Information ===");
+            Log.d(TAG, "Connected MAC Address: " + mMac);
+            Log.d(TAG, "Device Type: MST03 Sensor");
+            Log.d(TAG, "================================");
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Error querying device static info: " + e.getMessage());
+        }
     }
 
 

@@ -117,6 +117,62 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
+                        <!-- Device Information Card -->
+                        <androidx.cardview.widget.CardView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="20dp"
+                        app:cardCornerRadius="16dp"
+                        app:cardElevation="3dp"
+                        app:cardBackgroundColor="@color/card_background">
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="20dp">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Device Information"
+                                android:textColor="@color/text_primary"
+                                android:textStyle="bold"
+                                android:textSize="14sp"/>
+                            <TextView
+                                android:id="@+id/tv_device_id_info_1"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:text="Device ID: ABC123"
+                                android:textColor="@color/text_primary"
+                                android:textSize="12sp"/>
+                            <TextView
+                                android:id="@+id/tv_battery_level_1"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="Battery Level: 85%"
+                                android:textColor="@color/success"
+                                android:textSize="12sp"/>
+                            <TextView
+                                android:id="@+id/tv_beacon_timestamp_1"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="Beacon Timestamp: 21:21:25"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="12sp"/>
+                            <TextView
+                                android:id="@+id/tv_device_timestamp_1"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="Device Timestamp: 21:21:25"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="12sp"/>
+                        </LinearLayout>
+                    </androidx.cardview.widget.CardView>
+        
+
             <!-- Connection Status Card -->
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
