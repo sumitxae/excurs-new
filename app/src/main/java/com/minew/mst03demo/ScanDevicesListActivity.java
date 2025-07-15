@@ -11,6 +11,7 @@ import android.util.Log;
 import android.view.View;
 import android.view.View;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -62,15 +63,17 @@ public class ScanDevicesListActivity extends BaseActivity {
     private List<MST03Entity> allDiscoveredDevices = new ArrayList<>();
     private List<MST03Entity> filteredDevices = new ArrayList<>();
     private boolean isSearchMode = false;
-    private boolean isClearingSearch = false; // Flag to prevent recursive calls
-    private boolean isConnecting = false; // Flag to track connection state
+    private boolean isClearingSearch = false; 
+    private boolean isConnecting = false; 
     private android.os.Handler connectionTimeoutHandler = new android.os.Handler();
+    private android.os.Handler searchDebounceHandler = new android.os.Handler();
+    private static final int SEARCH_DEBOUNCE_DELAY = 500; 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         binding = ActivityScanDevicesBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
-        // Set status bar icons/text to dark
+        
         View decor = getWindow().getDecorView();
         decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         initRefresh();
@@ -79,28 +82,28 @@ public class ScanDevicesListActivity extends BaseActivity {
         initBleManager();
         initBlePermission();
         
-        // Start background scanning service
+        
         startBackgroundScanService();
         
-        // Initialize HTTP logger
+        
         httpLogger = new HttpLogger();
         
-        // Set up search functionality
+        
         setupSearchFunctionality();
     }
     
     private void setupSearchFunctionality() {
-        // QR Scan button
+        
         binding.btnScanQr.setOnClickListener(v -> {
             startQRScanner();
         });
         
-        // Clear search button
+        
         binding.btnClearSearch.setOnClickListener(v -> {
             clearSearch();
         });
         
-        // Add text change listener for real-time search
+        
         binding.etSearch.addTextChangedListener(new android.text.TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -108,19 +111,37 @@ public class ScanDevicesListActivity extends BaseActivity {
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
                 try {
-                    // Skip if we're in the middle of clearing search
+                    
                     if (isClearingSearch) {
                         return;
                     }
                     
                     String searchText = s.toString().trim();
-                    if (!searchText.isEmpty()) {
-                        filterDevices(searchText);
-                        // Show clear button when searching
-                        binding.btnClearSearch.setVisibility(View.VISIBLE);
-                    } else {
+                    
+                    
+                    searchDebounceHandler.removeCallbacksAndMessages(null);
+                    
+                    
+                    if (searchText.isEmpty()) {
                         clearSearch();
+                        return;
                     }
+                    
+                    
+                    binding.btnClearSearch.setVisibility(View.VISIBLE);
+                    
+                    
+                    searchDebounceHandler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            
+                            String currentSearchText = binding.etSearch.getText().toString().trim();
+                            if (!currentSearchText.isEmpty()) {
+                                filterDevices(currentSearchText);
+                            }
+                        }
+                    }, SEARCH_DEBOUNCE_DELAY);
+                    
                 } catch (Exception e) {
                     Log.e("ScanDebug", "Error in search text change: " + e.getMessage());
                     e.printStackTrace();
@@ -148,36 +169,50 @@ public class ScanDevicesListActivity extends BaseActivity {
             if (scanResult != null && !scanResult.trim().isEmpty()) {
                 Log.d("ScanDebug", "QR Code scanned: " + scanResult);
                 
-                // Process the QR code result
+                
                 processQRScanResult(scanResult);
             }
         }
     }
     
     private void processQRScanResult(String scanResult) {
-        // Try to extract MAC address from QR code
+        
         String macAddress = extractMacAddressFromQR(scanResult);
         
         if (macAddress != null) {
-            // Search for the device with this MAC address
+            
+            
+            isClearingSearch = true;
             binding.etSearch.setText(macAddress);
-            filterDevices(macAddress);
-            Toast.makeText(this, "Searching for device: " + macAddress, Toast.LENGTH_SHORT).show();
+            isClearingSearch = false;
+            
+            
+            binding.btnClearSearch.setVisibility(View.VISIBLE);
+            
+            
+            filterDevicesWithoutToast(macAddress);
         } else {
-            // If no MAC address found, just search for the raw text
+            
+            
+            isClearingSearch = true;
             binding.etSearch.setText(scanResult);
-            filterDevices(scanResult);
-            Toast.makeText(this, "Searching for: " + scanResult, Toast.LENGTH_SHORT).show();
+            isClearingSearch = false;
+            
+            
+            binding.btnClearSearch.setVisibility(View.VISIBLE);
+            
+            
+            filterDevicesWithoutToast(scanResult);
         }
     }
     
     private String extractMacAddressFromQR(String qrText) {
-        // Common MAC address patterns
+        
         String[] patterns = {
-            "([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})", // Standard MAC format
-            "([0-9A-Fa-f]{2}){6}", // MAC without separators
-            "MAC[\\s:]*([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})", // MAC with prefix
-            "Device[\\s:]*([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})" // Device with MAC
+            "([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})", 
+            "([0-9A-Fa-f]{2}){6}", 
+            "MAC[\\s:]*([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})", 
+            "Device[\\s:]*([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})" 
         };
         
         for (String pattern : patterns) {
@@ -188,7 +223,7 @@ public class ScanDevicesListActivity extends BaseActivity {
             }
         }
         
-        // If no pattern matches, check if the entire text looks like a MAC
+        
         if (qrText.matches("^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$")) {
             return qrText.toUpperCase();
         }
@@ -198,6 +233,12 @@ public class ScanDevicesListActivity extends BaseActivity {
     
     private void filterDevices(String searchText) {
         try {
+            
+            if (searchText == null || searchText.trim().isEmpty()) {
+                Log.d("ScanDebug", "Search text is empty, returning early");
+                return;
+            }
+            
             if (allDiscoveredDevices == null || allDiscoveredDevices.isEmpty()) {
                 Toast.makeText(this, "No devices discovered yet. Please wait for scan results.", Toast.LENGTH_SHORT).show();
                 return;
@@ -215,21 +256,21 @@ public class ScanDevicesListActivity extends BaseActivity {
             for (MST03Entity device : allDiscoveredDevices) {
                 if (device == null) continue;
                 
-                // Search by MAC address (case insensitive)
+                
                 if (device.getMacAddress() != null && 
                     device.getMacAddress().toLowerCase().contains(searchLower)) {
                     filteredDevices.add(device);
                     continue;
                 }
                 
-                // Search by device name (case insensitive)
+                
                 if (device.getName() != null && 
                     device.getName().toLowerCase().contains(searchLower)) {
                     filteredDevices.add(device);
                     continue;
                 }
                 
-                // Search by partial MAC address (without colons)
+                
                 String macWithoutColons = device.getMacAddress() != null ? 
                     device.getMacAddress().replace(":", "").toLowerCase() : "";
                 if (macWithoutColons.contains(searchLower.replace(":", ""))) {
@@ -237,11 +278,11 @@ public class ScanDevicesListActivity extends BaseActivity {
                 }
             }
             
-            // Update the adapter with filtered results safely
+            
             if (mDevicesListAdapter != null) {
                 mDevicesListAdapter.setList(filteredDevices);
                 
-                // Show search results count
+                
                 String resultText = filteredDevices.size() + " device(s) found";
                 if (filteredDevices.size() == 0) {
                     resultText = "No devices found matching '" + searchText + "'";
@@ -260,27 +301,97 @@ public class ScanDevicesListActivity extends BaseActivity {
         }
     }
     
+    private void filterDevicesWithoutToast(String searchText) {
+        try {
+            
+            if (searchText == null || searchText.trim().isEmpty()) {
+                Log.d("ScanDebug", "QR Search text is empty, returning early");
+                return;
+            }
+            
+            if (allDiscoveredDevices == null || allDiscoveredDevices.isEmpty()) {
+                Toast.makeText(this, "No devices discovered yet. Please wait for scan results.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            
+            isSearchMode = true;
+            if (filteredDevices == null) {
+                filteredDevices = new ArrayList<>();
+            } else {
+                filteredDevices.clear();
+            }
+            
+            String searchLower = searchText.toLowerCase();
+            
+            for (MST03Entity device : allDiscoveredDevices) {
+                if (device == null) continue;
+                
+                
+                if (device.getMacAddress() != null && 
+                    device.getMacAddress().toLowerCase().contains(searchLower)) {
+                    filteredDevices.add(device);
+                    continue;
+                }
+                
+                
+                if (device.getName() != null && 
+                    device.getName().toLowerCase().contains(searchLower)) {
+                    filteredDevices.add(device);
+                    continue;
+                }
+                
+                
+                String macWithoutColons = device.getMacAddress() != null ? 
+                    device.getMacAddress().replace(":", "").toLowerCase() : "";
+                if (macWithoutColons.contains(searchLower.replace(":", ""))) {
+                    filteredDevices.add(device);
+                }
+            }
+            
+            
+            if (mDevicesListAdapter != null) {
+                mDevicesListAdapter.setList(filteredDevices);
+                
+                
+                String resultText = filteredDevices.size() + " device(s) found";
+                if (filteredDevices.size() == 0) {
+                    resultText = "No devices found matching '" + searchText + "'";
+                }
+                Toast.makeText(this, resultText, Toast.LENGTH_SHORT).show();
+                
+                Log.d("ScanDebug", "QR Search for '" + searchText + "' returned " + filteredDevices.size() + " devices");
+            } else {
+                Log.e("ScanDebug", "Adapter is null, cannot update search results");
+            }
+            
+        } catch (Exception e) {
+            Log.e("ScanDebug", "Error in filterDevicesWithoutToast: " + e.getMessage());
+            e.printStackTrace();
+            Toast.makeText(this, "Error during search: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+    
     private void clearSearch() {
         try {
-            isClearingSearch = true; // Set flag to prevent recursive calls
+            isClearingSearch = true; 
             isSearchMode = false;
             
             if (binding.etSearch != null) {
-                // Clear the search text safely
+                
                 binding.etSearch.setText("");
             }
             
-            // Hide clear button safely
+            
             if (binding.btnClearSearch != null) {
                 binding.btnClearSearch.setVisibility(View.GONE);
             }
             
-            // Clear filtered devices
+            
             if (filteredDevices != null) {
                 filteredDevices.clear();
             }
             
-            // Show all discovered devices safely
+            
             if (mDevicesListAdapter != null && allDiscoveredDevices != null) {
                 mDevicesListAdapter.setList(allDiscoveredDevices);
                 Log.d("ScanDebug", "Search cleared, showing all " + allDiscoveredDevices.size() + " devices");
@@ -292,7 +403,7 @@ public class ScanDevicesListActivity extends BaseActivity {
             Log.e("ScanDebug", "Error in clearSearch: " + e.getMessage());
             e.printStackTrace();
         } finally {
-            isClearingSearch = false; // Reset flag
+            isClearingSearch = false; 
         }
     }
 
@@ -306,18 +417,22 @@ public class ScanDevicesListActivity extends BaseActivity {
     protected void onStop() {
         super.onStop();
         removeBleManagerListener();
-        // Keep scanning active in background
+        
         Log.d("ScanDebug", "App going to background, keeping scan active");
     }
     
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // Cleanup HTTP logger
+        
         if (httpLogger != null) {
             httpLogger.shutdown();
         }
-        // Don't stop the background service - let it continue scanning
+        
+        if (searchDebounceHandler != null) {
+            searchDebounceHandler.removeCallbacksAndMessages(null);
+        }
+        
         Log.d("ScanDebug", "Activity destroyed, background service continues");
     }
 
@@ -338,46 +453,46 @@ public class ScanDevicesListActivity extends BaseActivity {
 
         binding.recyclerView.addItemDecoration(new DividerItemDecoration(this, LinearLayout.VERTICAL));
         
-        // Set up connect button click listener
+        
         mDevicesListAdapter.setOnConnectClickListener(new ScanDevicesListAdapter.OnConnectClickListener() {
             @Override
             public void onConnectClick(MST03Entity device) {
-                // Check if already connecting
+                
                 if (isConnecting) {
                     Toast.makeText(ScanDevicesListActivity.this, "Already connecting to a device", Toast.LENGTH_SHORT).show();
                     return;
                 }
                 
-                // Set connecting state
+                
                 isConnecting = true;
                 
-                // Disable all connect buttons
+                
                 mDevicesListAdapter.setConnectButtonsEnabled(false);
                 
-                // Disconnect any existing connection first
+                
                 if (mBleManager != null && mst03Entity != null) {
                     mBleManager.disConnect(mst03Entity.getMacAddress());
                 }
                 
-                // Hide any existing device details card
+                
                 hideDeviceDetailsCard();
                 
-                // Set new device and connect
+                
                 mst03Entity = device;
                 setKey(mst03Entity.getMacAddress());
                 
                 try {
-                    connectedSensor();
+                connectedSensor();
                 } catch (Exception e) {
                     Log.e("ScanDebug", "Error during connection: " + e.getMessage());
                     Toast.makeText(ScanDevicesListActivity.this, "Connection failed: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                    // Reset state on error
+                    
                     isConnecting = false;
                     mDevicesListAdapter.setConnectButtonsEnabled(true);
                     hideDeviceDetailsCard();
                 }
                 
-                // Set connection timeout (30 seconds)
+                
                 connectionTimeoutHandler.postDelayed(() -> {
                     if (isConnecting) {
                         Log.d("ScanDebug", "Connection timeout - resetting state");
@@ -386,7 +501,7 @@ public class ScanDevicesListActivity extends BaseActivity {
                         Toast.makeText(ScanDevicesListActivity.this, "Connection timeout", Toast.LENGTH_SHORT).show();
                         hideDeviceDetailsCard();
                     }
-                }, 30000); // 30 seconds timeout
+                }, 30000); 
             }
         });
 
@@ -429,7 +544,7 @@ public class ScanDevicesListActivity extends BaseActivity {
             Log.d("ScanDebug", "Background scan service started successfully");
         } catch (Exception e) {
             Log.e("ScanDebug", "Failed to start background service: " + e.getMessage());
-            // Don't crash the app if service fails to start
+            
         }
     }
     private void setBleManagerListener(){
@@ -444,7 +559,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         public void onUpdateConnState(String s, BleConnectionState mSensorConnectionState) {
             Log.d("ScanDebug", "Connection state changed: " + mSensorConnectionState + " for device: " + s);
             
-            // Connection events are logged only for debugging
+            
             if (mst03Entity != null && s.equals(mst03Entity.getMacAddress())) {
                 Log.d("ScanDebug", "Connection event: " + mSensorConnectionState + " for " + mst03Entity.getMacAddress());
             }
@@ -460,21 +575,24 @@ public class ScanDevicesListActivity extends BaseActivity {
                     break;
                 case ConnectComplete:
                     Log.d("TAG","ConnectComplete");
-                    // Cancel connection timeout
+                    
                     connectionTimeoutHandler.removeCallbacksAndMessages(null);
-                    updateConnectionStatus("Connection Complete - Fetching Data...");
-                    // Fetch historical data immediately after connection
-                    fetchHistoricalData();
+                    
+                    
+                    showDeviceInfoImmediately();
+                    
+                    
+                    startAsyncDataUpload();
                     break;
                 case Disconnect:
                     Log.d("TAG","Disconnect");
-                    // Cancel connection timeout
+                    
                     connectionTimeoutHandler.removeCallbacksAndMessages(null);
                     updateConnectionStatus("Disconnected");
-                    // Reset connecting state and re-enable buttons
+                    
                     isConnecting = false;
                     mDevicesListAdapter.setConnectButtonsEnabled(true);
-                    // Only hide card if it's the current device that disconnected
+                    
                     if (mst03Entity != null && s.equals(mst03Entity.getMacAddress())) {
                         hideDeviceDetailsCard();
                     }
@@ -552,33 +670,40 @@ public class ScanDevicesListActivity extends BaseActivity {
         Log.d("ScanDebug", "Starting BLE scan...");
         ensureBleManagerReady();
         mDevicesListAdapter.setList(null);
-        // Use a longer scan duration and restart automatically
-        mBleManager.startScan(this, 10 * 60 * 1000, new OnScanDevicesResultListener<MST03Entity>() {
+        
+        
+        if (isBackgroundServiceRunning()) {
+            Log.d("ScanDebug", "Background service is running, skipping foreground scan");
+            return;
+        }
+        
+        
+        mBleManager.startScan(this, 6 * 1000, new OnScanDevicesResultListener<MST03Entity>() {
 
             @Override
             public void onScanResult(List<MST03Entity> list) {
                 Log.d("ScanDebug", "Scan result received. Found " + list.size() + " devices");
                 
                 if (list.size() > 0) {
-                    // Update the master list of all discovered devices
+                    
                     updateAllDiscoveredDevices(list);
                     
                     for (MST03Entity device : list) {
                         Log.d("ScanDebug", "Device found: " + device.getMacAddress() + " - " + device.getName() + " (RSSI: " + device.getRssi() + ")");
                         
-                        // Log scan data to HTTP server
+                        
                         float temperature = 0.0f;
                         int battery = 0;
                         String firmwareVersion = "Unknown";
                         
-                        // Get temperature from combination frame
+                        
                         if (device.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME) != null) {
                             com.minew.ble.mst03.frames.CombinationFrame comboFrame = 
                                 (com.minew.ble.mst03.frames.CombinationFrame) device.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
                             temperature = comboFrame.getTemperature();
                         }
                         
-                        // Get device info from static frame
+                        
                         if (device.getMinewFrame(com.minew.ble.v3.enums.FrameType.DEVICE_INFORMATION_FRAME) != null) {
                             DeviceStaticInfoFrame staticFrame = 
                                 (DeviceStaticInfoFrame) device.getMinewFrame(com.minew.ble.v3.enums.FrameType.DEVICE_INFORMATION_FRAME);
@@ -592,7 +717,7 @@ public class ScanDevicesListActivity extends BaseActivity {
                     Log.d("ScanDebug", "No devices found in this scan result");
                 }
                 
-                // Sort the list by RSSI (strongest signal first)
+                
                 list.sort(new Comparator<MST03Entity>() {
                     @Override
                     public int compare(MST03Entity o1, MST03Entity o2) {
@@ -600,12 +725,12 @@ public class ScanDevicesListActivity extends BaseActivity {
                     }
                 });
                 
-                // Update the adapter based on search mode
+                
                 if (isSearchMode && !filteredDevices.isEmpty()) {
-                    // In search mode, show filtered results
+                    
                     mDevicesListAdapter.setList(filteredDevices);
                 } else {
-                    // Normal mode, show all discovered devices
+                    
                     mDevicesListAdapter.setList(allDiscoveredDevices);
                 }
             }
@@ -613,11 +738,12 @@ public class ScanDevicesListActivity extends BaseActivity {
             @Override
             public void onStopScan(List<MST03Entity> list) {
                 Log.d("ScanDebug", "Scan stopped. Total devices found: " + (list != null ? list.size() : 0));
-                // Restart scan automatically after a short delay
+                
+                Log.d("ScanDebug", "Waiting 6 seconds before next scan cycle...");
                 new android.os.Handler().postDelayed(() -> {
-                    Log.d("ScanDebug", "Auto-restarting scan...");
+                    Log.d("ScanDebug", "Starting next 6-second scan cycle...");
                     startScan();
-                }, 2000); // 2 second delay before restart
+                }, 6000); 
             }
 
         });
@@ -625,28 +751,28 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
     
     private void updateAllDiscoveredDevices(List<MST03Entity> newDevices) {
-        // Create a map of existing devices by MAC address for quick lookup
+        
         java.util.Map<String, MST03Entity> existingDevicesMap = new java.util.HashMap<>();
         for (MST03Entity device : allDiscoveredDevices) {
             existingDevicesMap.put(device.getMacAddress(), device);
         }
         
-        // Add or update devices from the new scan result
+        
         for (MST03Entity newDevice : newDevices) {
             String macAddress = newDevice.getMacAddress();
             if (existingDevicesMap.containsKey(macAddress)) {
-                // Update existing device with new data (RSSI, etc.)
+                
                 MST03Entity existingDevice = existingDevicesMap.get(macAddress);
-                // Update RSSI and other dynamic properties
+                
                 existingDevice.setRssi(newDevice.getRssi());
-                // You might want to update other properties as well
+                
             } else {
-                // Add new device
+                
                 allDiscoveredDevices.add(newDevice);
             }
         }
         
-        // Sort all discovered devices by RSSI
+        
         allDiscoveredDevices.sort(new Comparator<MST03Entity>() {
             @Override
             public int compare(MST03Entity o1, MST03Entity o2) {
@@ -661,6 +787,16 @@ public class ScanDevicesListActivity extends BaseActivity {
         mBleManager.stopScan(this);
         mObjectAnimator.cancel();
     }
+    
+    private boolean isBackgroundServiceRunning() {
+        android.app.ActivityManager manager = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        for (android.app.ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
+            if (BackgroundScanService.class.getName().equals(service.service.getClassName())) {
+                return true;
+            }
+        }
+        return false;
+    }
 
 
     private void setKey(String mac){
@@ -668,29 +804,29 @@ public class ScanDevicesListActivity extends BaseActivity {
         mBleManager.setSecretKey(mac,key);
     }
     private void connectedSensor(){
-        // Validate device
+        
         if (mst03Entity == null) {
             Log.e("ScanDebug", "Device is null, cannot connect");
             Toast.makeText(this, "Device not available", Toast.LENGTH_SHORT).show();
             return;
         }
         
-        // Store device static info before connecting
+        
         if (mst03Entity.getMinewFrame(com.minew.ble.v3.enums.FrameType.DEVICE_INFORMATION_FRAME) != null) {
             currentDeviceStaticInfo = (DeviceStaticInfoFrame) mst03Entity.getMinewFrame(com.minew.ble.v3.enums.FrameType.DEVICE_INFORMATION_FRAME);
         }
         
-        // Show device details card
+        
         showDeviceDetailsCard();
         
-        // Ensure BLE manager is properly initialized
+        
         if (mBleManager == null) {
             Log.e("ScanDebug", "BLE manager is null, reinitializing...");
             mBleManager = MST03SensorBleManager.getInstance();
             setBleManagerListener();
         }
         
-        // Connect to device
+        
         Log.d("ScanDebug", "Attempting to connect to device: " + mst03Entity.getMacAddress());
         mBleManager.connect(this, mst03Entity);
     }
@@ -701,7 +837,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         binding.llDeviceInfo.setVisibility(View.GONE);
         binding.llHistoricalData.setVisibility(View.GONE);
         
-        // Set device info
+        
         if (currentDeviceStaticInfo != null) {
             binding.tvScanDeviceMac.setText("MAC: " + currentDeviceStaticInfo.getMacAddress());
             binding.tvScanDeviceBattery.setText("Battery: " + currentDeviceStaticInfo.getBattery() + "%");
@@ -712,24 +848,24 @@ public class ScanDevicesListActivity extends BaseActivity {
             binding.tvScanDeviceFirmware.setText("Firmware: Unknown");
         }
         
-        // Set up close button
+        
         binding.btnCloseDetails.setOnClickListener(v -> hideDeviceDetailsCard());
     }
     
     private void hideDeviceDetailsCard() {
         binding.deviceDetailsCard.setVisibility(View.GONE);
-        // Cancel connection timeout
+        
         connectionTimeoutHandler.removeCallbacksAndMessages(null);
-        // Disconnect if connected
+        
         if (mst03Entity != null && mBleManager != null) {
             mBleManager.disConnect(mst03Entity.getMacAddress());
             Log.d("ScanDebug", "Disconnected from device: " + mst03Entity.getMacAddress());
         }
-        // Reset state
+        
         mst03Entity = null;
         currentDeviceStaticInfo = null;
         excursionDataList.clear();
-        // Reset connecting state and re-enable buttons
+        
         isConnecting = false;
         mDevicesListAdapter.setConnectButtonsEnabled(true);
     }
@@ -738,12 +874,60 @@ public class ScanDevicesListActivity extends BaseActivity {
         binding.tvScanConnectionStatus.setText("Status: " + status);
     }
     
+    private void showDeviceInfoImmediately() {
+        
+        binding.deviceDetailsCard.setVisibility(View.VISIBLE);
+        binding.llLoading.setVisibility(View.GONE);
+        binding.llDeviceInfo.setVisibility(View.VISIBLE);
+        binding.llHistoricalData.setVisibility(View.GONE);
+        
+        
+        if (currentDeviceStaticInfo != null) {
+            binding.tvScanDeviceMac.setText("MAC: " + currentDeviceStaticInfo.getMacAddress());
+            binding.tvScanDeviceBattery.setText("Battery: " + currentDeviceStaticInfo.getBattery() + "%");
+            binding.tvScanDeviceFirmware.setText("Firmware: " + currentDeviceStaticInfo.getFirmwareVersion());
+        } else {
+            binding.tvScanDeviceMac.setText("MAC: " + mst03Entity.getMacAddress());
+            binding.tvScanDeviceBattery.setText("Battery: Unknown");
+            binding.tvScanDeviceFirmware.setText("Firmware: Unknown");
+        }
+        
+        
+        updateConnectionStatus("Connected - Uploading Data...");
+        
+        
+        binding.btnCloseDetails.setOnClickListener(v -> hideDeviceDetailsCard());
+        
+        Log.d("ScanDebug", "Device info card shown immediately after connection");
+    }
+    
+    private void startAsyncDataUpload() {
+        
+        new Thread(() -> {
+            try {
+                Log.d("ScanDebug", "Starting async data upload for device: " + mst03Entity.getMacAddress());
+                
+                
+                fetchHistoricalDataAsync();
+                
+            } catch (Exception e) {
+                Log.e("ScanDebug", "Error in async data upload: " + e.getMessage());
+                e.printStackTrace();
+                
+                
+                runOnUiThread(() -> {
+                    updateConnectionStatus("Data Upload Failed");
+                });
+            }
+        }).start();
+    }
+    
     private void fetchHistoricalData() {
         Log.d("ScanDebug", "Fetching historical data for device: " + mst03Entity.getMacAddress());
         
         long systemTime = System.currentTimeMillis() / 1000;
-        // Query full 24 hours of data as requested by client
-        long startTime = (systemTime - 3600 * 24) / 1000; // Last 24 hours
+        
+        long startTime = (systemTime - 3600 * 24) / 1000; 
         long endTime = systemTime;
         
         Log.d("ScanDebug", "Query parameters - startTime: " + startTime + ", endTime: " + endTime + ", systemTime: " + systemTime);
@@ -757,16 +941,57 @@ public class ScanDevicesListActivity extends BaseActivity {
                         List<HtData> allData = historyHtData.getHistoryDataList();
                         Log.d("ScanDebug", "Historical data received: " + allData.size() + " records - sending FULL data in chunks");
                         
-                        // Send ALL data - no limitations
+                        
                         analyzeExcursions(allData);
                     } else {
                         Log.d("ScanDebug", "Failed to get historical data - success: " + success + ", historyHtData null: " + (historyHtData == null));
                         updateConnectionStatus("Failed to get data");
                         
-                        // Even if historical data fails, try to send device info
+                        
                         if (mst03Entity != null) {
                             Log.d("ScanDebug", "Sending device info without historical data");
                             sendCompleteDeviceData(new ArrayList<>());
+                            
+                            updateHistoricalDataUI(0, 0, -1);
+                        }
+                    }
+                }
+            });
+    }
+    
+    private void fetchHistoricalDataAsync() {
+        Log.d("ScanDebug", "Fetching historical data asynchronously for device: " + mst03Entity.getMacAddress());
+        
+        long systemTime = System.currentTimeMillis() / 1000;
+        
+        long startTime = (systemTime - 3600 * 24) / 1000; 
+        long endTime = systemTime;
+        
+        Log.d("ScanDebug", "Async query parameters - startTime: " + startTime + ", endTime: " + endTime + ", systemTime: " + systemTime);
+        
+        mBleManager.queryHistoryData(mst03Entity.getMacAddress(), 1, startTime, endTime, systemTime, 
+            new OnQueryResultListener<HistoryHtData>() {
+                @Override
+                public void OnQueryResult(boolean success, HistoryHtData historyHtData) {
+                    Log.d("ScanDebug", "Async OnQueryResult called - success: " + success + ", historyHtData: " + (historyHtData != null));
+                    if (success && historyHtData != null) {
+                        List<HtData> allData = historyHtData.getHistoryDataList();
+                        Log.d("ScanDebug", "Async historical data received: " + allData.size() + " records - sending FULL data in chunks");
+                        
+                        
+                        analyzeExcursionsAsync(allData);
+                    } else {
+                        Log.d("ScanDebug", "Async failed to get historical data - success: " + success + ", historyHtData null: " + (historyHtData == null));
+                        
+                        
+                        runOnUiThread(() -> {
+                            updateConnectionStatus("Data Upload Failed");
+                        });
+                        
+                        
+                        if (mst03Entity != null) {
+                            Log.d("ScanDebug", "Sending device info without historical data");
+                            sendCompleteDeviceDataAsync(new ArrayList<>());
                         }
                     }
                 }
@@ -776,11 +1001,28 @@ public class ScanDevicesListActivity extends BaseActivity {
     private void analyzeExcursions(List<HtData> htDataList) {
         excursionDataList.clear();
         
-        for (HtData htData : htDataList) {
+        
+        long firstExcursionStartTime = -1;
+        boolean wasInNormalRange = false;
+        
+        for (int i = 0; i < htDataList.size(); i++) {
+            HtData htData = htDataList.get(i);
             float temperature = htData.getTemperature();
             long timestamp = htData.getTimestamps();
             
-            // Check for excursions (outside 2-8°C range)
+            
+            boolean isInNormalRange = (temperature >= 2.0f && temperature <= 8.0f);
+            
+            
+            if (wasInNormalRange && !isInNormalRange && firstExcursionStartTime == -1) {
+                firstExcursionStartTime = timestamp;
+                Log.d("ScanDebug", "First excursion started at: " + new java.util.Date(timestamp));
+            }
+            
+            
+            wasInNormalRange = isInNormalRange;
+            
+            
             if (temperature < 2.0f) {
                 excursionDataList.add(new ExcursionData(temperature, timestamp, "LOW", mst03Entity.getMacAddress()));
             } else if (temperature > 8.0f) {
@@ -788,15 +1030,61 @@ public class ScanDevicesListActivity extends BaseActivity {
             }
         }
         
-        // Log excursions to file
+        
         excursionLogger = new ExcursionLogger(this, mst03Entity.getMacAddress());
         excursionLogger.logExcursions(excursionDataList);
         
-        // Send complete device data to HTTP server
+        
         sendCompleteDeviceData(htDataList);
         
-        // Update UI
-        updateHistoricalDataUI(htDataList.size(), excursionDataList.size());
+        
+        updateHistoricalDataUI(htDataList.size(), excursionDataList.size(), firstExcursionStartTime);
+    }
+    
+    private void analyzeExcursionsAsync(List<HtData> htDataList) {
+        excursionDataList.clear();
+        
+        
+        long firstExcursionStartTime = -1;
+        boolean wasInNormalRange = false;
+        
+        for (int i = 0; i < htDataList.size(); i++) {
+            HtData htData = htDataList.get(i);
+            float temperature = htData.getTemperature();
+            long timestamp = htData.getTimestamps();
+            
+            
+            boolean isInNormalRange = (temperature >= 2.0f && temperature <= 8.0f);
+            
+            
+            if (wasInNormalRange && !isInNormalRange && firstExcursionStartTime == -1) {
+                firstExcursionStartTime = timestamp;
+                Log.d("ScanDebug", "Async - First excursion started at: " + new java.util.Date(timestamp));
+            }
+            
+            
+            wasInNormalRange = isInNormalRange;
+            
+            
+            if (temperature < 2.0f) {
+                excursionDataList.add(new ExcursionData(temperature, timestamp, "LOW", mst03Entity.getMacAddress()));
+            } else if (temperature > 8.0f) {
+                excursionDataList.add(new ExcursionData(temperature, timestamp, "HIGH", mst03Entity.getMacAddress()));
+            }
+        }
+        
+        
+        excursionLogger = new ExcursionLogger(this, mst03Entity.getMacAddress());
+        excursionLogger.logExcursions(excursionDataList);
+        
+        
+        sendCompleteDeviceDataAsync(htDataList);
+        
+        
+        final long finalFirstExcursionStartTime = firstExcursionStartTime;
+        runOnUiThread(() -> {
+            updateHistoricalDataUI(htDataList.size(), excursionDataList.size(), finalFirstExcursionStartTime);
+        });
     }
     
     private void sendCompleteDeviceData(List<HtData> htDataList) {
@@ -807,7 +1095,7 @@ public class ScanDevicesListActivity extends BaseActivity {
             return;
         }
         
-        // Get device info
+        
         String deviceMac = mst03Entity.getMacAddress();
         String deviceName = mst03Entity.getName() != null ? mst03Entity.getName() : "Unknown";
         float currentTemperature = 0.0f;
@@ -817,7 +1105,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         
         Log.d("ScanDebug", "Device info - MAC: " + deviceMac + ", Name: " + deviceName + ", RSSI: " + rssi);
         
-        // Get current temperature from combination frame
+        
         if (mst03Entity.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME) != null) {
             com.minew.ble.mst03.frames.CombinationFrame comboFrame = 
                 (com.minew.ble.mst03.frames.CombinationFrame) mst03Entity.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
@@ -827,7 +1115,7 @@ public class ScanDevicesListActivity extends BaseActivity {
             Log.d("ScanDebug", "No combination frame available for temperature");
         }
         
-        // Get device info from static frame
+        
         if (currentDeviceStaticInfo != null) {
             batteryLevel = currentDeviceStaticInfo.getBattery();
             firmwareVersion = currentDeviceStaticInfo.getFirmwareVersion();
@@ -838,40 +1126,108 @@ public class ScanDevicesListActivity extends BaseActivity {
         
         Log.d("ScanDebug", "About to send complete device data to HTTP server");
         
-        // Send complete device data
+        
         httpLogger.logCompleteDeviceData(deviceMac, deviceName, currentTemperature, firmwareVersion, 
                                         batteryLevel, rssi, htDataList, excursionDataList);
         
         Log.d("ScanDebug", "Complete device data sent, scheduling disconnect and scan resume");
         
-        // Show toast for excursion data upload
+        
         if (excursionDataList.size() > 0) {
             Toast.makeText(this, "Excursion data uploaded", Toast.LENGTH_SHORT).show();
         }
         
-        // Disconnect and resume scanning after a short delay
+        
         new android.os.Handler().postDelayed(() -> {
             Log.d("ScanDebug", "Disconnecting and resuming scan after data collection");
             hideDeviceDetailsCard();
             startScan();
-        }, 2000); // 2 second delay to ensure data is sent
+        }, 7000); 
     }
     
-    private void updateHistoricalDataUI(int totalReadings, int excursionCount) {
+    private void sendCompleteDeviceDataAsync(List<HtData> htDataList) {
+        Log.d("ScanDebug", "sendCompleteDeviceDataAsync called with " + htDataList.size() + " historical records");
+        
+        if (mst03Entity == null) {
+            Log.e("ScanDebug", "mst03Entity is null, cannot send device data");
+            return;
+        }
+        
+        
+        String deviceMac = mst03Entity.getMacAddress();
+        String deviceName = mst03Entity.getName() != null ? mst03Entity.getName() : "Unknown";
+        float currentTemperature = 0.0f;
+        String firmwareVersion = "Unknown";
+        int batteryLevel = 0;
+        int rssi = mst03Entity.getRssi();
+        
+        Log.d("ScanDebug", "Async device info - MAC: " + deviceMac + ", Name: " + deviceName + ", RSSI: " + rssi);
+        
+        
+        if (mst03Entity.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME) != null) {
+            com.minew.ble.mst03.frames.CombinationFrame comboFrame = 
+                (com.minew.ble.mst03.frames.CombinationFrame) mst03Entity.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
+            currentTemperature = comboFrame.getTemperature();
+            Log.d("ScanDebug", "Async current temperature from combo frame: " + currentTemperature);
+        } else {
+            Log.d("ScanDebug", "Async no combination frame available for temperature");
+        }
+        
+        
+        if (currentDeviceStaticInfo != null) {
+            batteryLevel = currentDeviceStaticInfo.getBattery();
+            firmwareVersion = currentDeviceStaticInfo.getFirmwareVersion();
+            Log.d("ScanDebug", "Async device static info - Battery: " + batteryLevel + "%, Firmware: " + firmwareVersion);
+        } else {
+            Log.d("ScanDebug", "Async no device static info available");
+        }
+        
+        Log.d("ScanDebug", "About to send complete device data to HTTP server asynchronously");
+        
+        
+        httpLogger.logCompleteDeviceData(deviceMac, deviceName, currentTemperature, firmwareVersion, 
+                                        batteryLevel, rssi, htDataList, excursionDataList);
+        
+        Log.d("ScanDebug", "Async complete device data sent");
+        
+        
+        if (excursionDataList.size() > 0) {
+            runOnUiThread(() -> {
+                Toast.makeText(this, "Excursion data uploaded", Toast.LENGTH_SHORT).show();
+            });
+        }
+        
+        
+        runOnUiThread(() -> {
+            updateConnectionStatus("Data Upload Complete");
+        });
+    }
+    
+    private void updateHistoricalDataUI(int totalReadings, int excursionCount, long firstExcursionStartTime) {
         binding.llLoading.setVisibility(View.GONE);
         binding.llDeviceInfo.setVisibility(View.VISIBLE);
-        // Hide historical data section - don't show excursion data to user
-        binding.llHistoricalData.setVisibility(View.GONE);
         
-        // Don't update excursion UI elements since we're hiding them
-        updateConnectionStatus("Data Analysis Complete");
+        
+        if (firstExcursionStartTime != -1) {
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault());
+            String excursionStartTimeStr = sdf.format(new java.util.Date(firstExcursionStartTime));
+            binding.tvScanConnectionStatus.setText("Status: Data Analysis Complete");
+            binding.tvExcursionStartTime.setVisibility(View.VISIBLE);
+            binding.tvExcursionStartTime.setText("Excursion Started at: " + excursionStartTimeStr);
+        } else {
+            updateConnectionStatus("Data Analysis Complete - No Excursions Found");
+            binding.tvExcursionStartTime.setVisibility(View.GONE);
+        }
+        
+        
+        binding.llHistoricalData.setVisibility(View.GONE);
     }
     
     private void viewLogFile() {
         String logPath = excursionLogger.getLogFilePath();
         if (logPath != null) {
             Log.d("ScanDebug", "Log file path: " + logPath);
-            // Show log file content in a dialog or new activity
+            
             showLogFileContent(logPath);
         } else {
             Toast.makeText(this, "No log file found", Toast.LENGTH_SHORT).show();
@@ -890,7 +1246,7 @@ public class ScanDevicesListActivity extends BaseActivity {
                 }
                 reader.close();
                 
-                // Show content in a dialog
+                
                 new androidx.appcompat.app.AlertDialog.Builder(this)
                     .setTitle("Excursion Log File")
                     .setMessage(content.toString())

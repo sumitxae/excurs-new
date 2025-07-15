@@ -34,7 +34,7 @@ public class ScanDevicesListAdapter extends BaseQuickAdapter<MST03Entity, BaseVi
     
     public void setConnectButtonsEnabled(boolean enabled) {
         this.connectButtonsEnabled = enabled;
-        notifyDataSetChanged(); // Refresh all items to update button states
+        notifyDataSetChanged(); 
     }
 
     public ScanDevicesListAdapter(int layoutResId, List<MST03Entity> data) {
@@ -50,7 +50,7 @@ public class ScanDevicesListAdapter extends BaseQuickAdapter<MST03Entity, BaseVi
         if(mst03Entity.getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME)!=null){
             deviceStaticInfoFrame = (DeviceStaticInfoFrame) mst03Entity.getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
             
-            // Log device static information including battery level
+            
             Log.d("Scan", "=== Device Static Info for " + mst03Entity.getMacAddress() + " ===");
             Log.d("Scan", "Battery Level: " + deviceStaticInfoFrame.getBattery() + "%");
             Log.d("Scan", "MAC Address: " + deviceStaticInfoFrame.getMacAddress());
@@ -74,26 +74,26 @@ public class ScanDevicesListAdapter extends BaseQuickAdapter<MST03Entity, BaseVi
         if(mst03Entity.getMinewFrame(FrameType.STRING_FRAME)!=null){
             stringFrame = (StringFrame) mst03Entity.getMinewFrame(FrameType.STRING_FRAME);
         }
-        // Device ID - Show MAC address instead of device name
+        
         baseViewHolder.setText(R.id.tv_scan_device_name, mst03Entity.getMacAddress());
         
-        // Calculate temperature value
+        
         float tempValue = Float.NaN;
         
-        // Try to get temperature from combination frame first
+        
         if (combinationFrame != null) {
             tempValue = combinationFrame.getTemperature();
             Log.d("Scan", "Temperature from CombinationFrame: " + tempValue + "°C");
         }
         
-        // Log if temperature is 0 or invalid
+        
         if (tempValue == 0.0f) {
             Log.d("Scan", "Warning: Temperature is 0°C for device: " + mst03Entity.getMacAddress());
         }
         
-        // Status badge - use the calculated temperature value
+        
         TextView statusBadge = baseViewHolder.getView(R.id.tv_status_badge);
-        if (!Float.isNaN(tempValue) && tempValue != 0.0f && tempValue > 8.0f) {
+        if (!Float.isNaN(tempValue) && tempValue != 0.0f && (tempValue > 8.0f || tempValue < 2.0f)) {
             statusBadge.setText("ALERT");
             statusBadge.setTextColor(Color.parseColor("#FF4B4B"));
             statusBadge.setBackgroundResource(R.drawable.bg_status_badge_alert);
@@ -103,16 +103,16 @@ public class ScanDevicesListAdapter extends BaseQuickAdapter<MST03Entity, BaseVi
             statusBadge.setBackgroundResource(R.drawable.bg_status_badge_normal);
         }
         
-        // Sensor type
+        
         baseViewHolder.setText(R.id.tv_sensor_type, "Temperature Sensor");
         
-        // Set temperature text and color
+        
         TextView tempText = baseViewHolder.getView(R.id.tv_scan_device_ht);
         
-        // Display temperature using the calculated tempValue
+        
         if (!Float.isNaN(tempValue) && tempValue != 0.0f) {
             tempText.setText(String.format("%.1f°C", tempValue));
-            if (tempValue > 8.0f) {
+            if (tempValue > 8.0f || tempValue < 2.0f) {
                 tempText.setTextColor(tempText.getContext().getResources().getColor(R.color.error));
             } else {
                 tempText.setTextColor(tempText.getContext().getResources().getColor(R.color.primary));
@@ -122,13 +122,13 @@ public class ScanDevicesListAdapter extends BaseQuickAdapter<MST03Entity, BaseVi
             tempText.setTextColor(tempText.getContext().getResources().getColor(R.color.text_secondary));
         }
 
-        // Set card shadow color based on excursion
+        
         View cardView = baseViewHolder.itemView;
         if (cardView instanceof androidx.cardview.widget.CardView) {
             androidx.cardview.widget.CardView card = (androidx.cardview.widget.CardView) cardView;
-            if (combinationFrame != null && tempValue > 8.0f) {
+            if (combinationFrame != null && (tempValue > 8.0f || tempValue < 2.0f)) {
                 card.setCardBackgroundColor(card.getContext().getResources().getColor(R.color.card_background));
-                card.setCardElevation(12f); // Increased shadow
+                card.setCardElevation(12f); 
                 card.setOutlineSpotShadowColor(card.getContext().getResources().getColor(R.color.primary));
             } else {
                 card.setCardBackgroundColor(card.getContext().getResources().getColor(R.color.card_background));
@@ -136,18 +136,18 @@ public class ScanDevicesListAdapter extends BaseQuickAdapter<MST03Entity, BaseVi
                 card.setOutlineSpotShadowColor(card.getContext().getResources().getColor(R.color.border));
             }
         }
-        // Set up connect button click listener and state
+        
         View connectButton = baseViewHolder.getView(R.id.btn_connect);
         connectButton.setEnabled(connectButtonsEnabled);
-        connectButton.setAlpha(connectButtonsEnabled ? 1.0f : 0.5f); // Visual feedback for disabled state
+        connectButton.setAlpha(connectButtonsEnabled ? 1.0f : 0.5f); 
         
         connectButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                // Handle connect button click
+                
                 if (mst03Entity != null && connectButtonsEnabled) {
                     Log.d("ScanDebug", "Connect button clicked for device: " + mst03Entity.getMacAddress());
-                    // This will be handled by the activity through a callback
+                    
                     if (onConnectClickListener != null) {
                         onConnectClickListener.onConnectClick(mst03Entity);
                     }
@@ -155,7 +155,7 @@ public class ScanDevicesListAdapter extends BaseQuickAdapter<MST03Entity, BaseVi
             }
         });
         
-        // No excursion event message
+        
     }
 
 

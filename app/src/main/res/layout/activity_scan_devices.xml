@@ -57,7 +57,7 @@
                 android:layout_height="37dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_search_edittext"
-                android:hint="Search by MAC address or device name..."
+                android:hint="Search by MAC address..."
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp"
                 android:textColor="@color/text_primary"
@@ -70,7 +70,7 @@
                 android:layout_height="37dp"
                 android:layout_marginStart="8dp"
                 android:text="✕"
-                android:textColor="@color/text_secondary"
+                android:textColor="@color/card_background"
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:background="@drawable/bg_search_edittext"
@@ -79,20 +79,34 @@
                 android:paddingTop="0dp"
                 android:paddingBottom="0dp"
                 android:visibility="gone" />
-            <Button
+            <LinearLayout
                 android:id="@+id/btn_scan_qr"
                 android:layout_width="74dp"
                 android:layout_height="37dp"
                 android:layout_marginStart="8dp"
-                android:text="Scan QR"
-                android:textColor="@color/card_background"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:background="@drawable/bg_connect_button"
-                android:paddingStart="0dp"
-                android:paddingEnd="0dp"
-                android:paddingTop="0dp"
-                android:paddingBottom="0dp" />
+                android:background="@drawable/bg_scan_button"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp">
+                
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:src="@drawable/ic_barcode"
+                    android:contentDescription="QR scan icon" />
+                
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Scan"
+                    android:textColor="@color/card_background"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:layout_marginStart="4dp" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 
@@ -162,7 +176,8 @@
                     android:textSize="16sp"
                     android:background="?android:attr/selectableItemBackgroundBorderless"
                     android:minWidth="32dp"
-                    android:minHeight="32dp" />
+                    android:minHeight="32dp"
+                    android:paddingEnd="0dp" />
             </LinearLayout>
 
             <!-- Device Info Content -->
@@ -207,7 +222,17 @@
                     android:text="Status: Connecting..."
                     android:textColor="@color/text_secondary"
                     android:textSize="14sp"
-                    android:layout_marginBottom="16dp" />
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/tv_excursion_start_time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"
+                    android:layout_marginBottom="8dp"
+                    android:visibility="gone"/>
             </LinearLayout>
 
             <!-- Historical Data Content -->

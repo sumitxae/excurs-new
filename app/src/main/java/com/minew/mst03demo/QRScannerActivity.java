@@ -2,12 +2,15 @@ package com.minew.mst03demo;
 
 import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import com.budiyev.android.codescanner.CodeScanner;
 import com.budiyev.android.codescanner.CodeScannerView;
@@ -21,6 +24,7 @@ import java.util.List;
 public class QRScannerActivity extends AppCompatActivity {
     private static final String TAG = "QRScannerActivity";
     public static final String EXTRA_SCAN_RESULT = "scan_result";
+    private static final int CAMERA_PERMISSION_REQUEST = 100;
     
     private CodeScanner codeScanner;
     private CodeScannerView scannerView;
@@ -32,7 +36,7 @@ public class QRScannerActivity extends AppCompatActivity {
         
         scannerView = findViewById(R.id.scanner_view);
         
-        // Set up back button
+        
         findViewById(R.id.btn_back).setOnClickListener(new android.view.View.OnClickListener() {
             @Override
             public void onClick(android.view.View view) {
@@ -40,27 +44,34 @@ public class QRScannerActivity extends AppCompatActivity {
             }
         });
         
-        // Request camera permission first
+        
         requestCameraPermission();
     }
     
     private void requestCameraPermission() {
-        // For now, just initialize the scanner directly
-        // Camera permission will be requested by the scanner library
-        initializeScanner();
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) 
+                != PackageManager.PERMISSION_GRANTED) {
+            
+            ActivityCompat.requestPermissions(this, 
+                    new String[]{Manifest.permission.CAMERA}, 
+                    CAMERA_PERMISSION_REQUEST);
+        } else {
+            
+            initializeScanner();
+        }
     }
     
     private void initializeScanner() {
         codeScanner = new CodeScanner(this, scannerView);
         
-        // Configure scanner
+        
         codeScanner.setCamera(CodeScanner.CAMERA_BACK);
         codeScanner.setFormats(CodeScanner.ALL_FORMATS);
         codeScanner.setScanMode(ScanMode.SINGLE);
         codeScanner.setAutoFocusEnabled(true);
         codeScanner.setFlashEnabled(false);
         
-        // Set decode callback
+        
         codeScanner.setDecodeCallback(new DecodeCallback() {
             @Override
             public void onDecoded(@NonNull final Result result) {
@@ -70,7 +81,7 @@ public class QRScannerActivity extends AppCompatActivity {
                         String scanResult = result.getText();
                         Log.d(TAG, "QR Code scanned: " + scanResult);
                         
-                        // Return the result to the calling activity
+                        
                         Intent resultIntent = new Intent();
                         resultIntent.putExtra(EXTRA_SCAN_RESULT, scanResult);
                         setResult(RESULT_OK, resultIntent);
@@ -80,7 +91,7 @@ public class QRScannerActivity extends AppCompatActivity {
             }
         });
         
-        // Set error callback
+        
         codeScanner.setErrorCallback(new ErrorCallback() {
             @Override
             public void onError(@NonNull Throwable error) {
@@ -88,20 +99,58 @@ public class QRScannerActivity extends AppCompatActivity {
                     @Override
                     public void run() {
                         Log.e(TAG, "Camera error: " + error.getMessage());
-                        Toast.makeText(QRScannerActivity.this, 
-                                "Camera error: " + error.getMessage(), Toast.LENGTH_LONG).show();
+                        String errorMessage = "Camera error: " + error.getMessage();
+                        
+                        
+                        if (error.getMessage() != null && 
+                            error.getMessage().contains("failed to connect to camera service")) {
+                            errorMessage = "Camera service unavailable. Please check if another app is using the camera.";
+                        } else if (error.getMessage() != null && 
+                                   error.getMessage().contains("permission")) {
+                            errorMessage = "Camera permission denied. Please grant camera permission in settings.";
+                        }
+                        
+                        Toast.makeText(QRScannerActivity.this, errorMessage, Toast.LENGTH_LONG).show();
+                        
+                        
+                        new android.os.Handler().postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                finish();
+                            }
+                        }, 2000);
                     }
                 });
             }
         });
         
-        // Start preview when scanner view is clicked
+        
         scannerView.setOnClickListener(new android.view.View.OnClickListener() {
             @Override
             public void onClick(android.view.View view) {
                 codeScanner.startPreview();
             }
         });
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, 
+                                         @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        
+        if (requestCode == CAMERA_PERMISSION_REQUEST) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                
+                Log.d(TAG, "Camera permission granted");
+                initializeScanner();
+            } else {
+                
+                Log.e(TAG, "Camera permission denied");
+                Toast.makeText(this, "Camera permission is required to scan QR codes", 
+                             Toast.LENGTH_LONG).show();
+                finish();
+            }
+        }
     }
 
     @Override
