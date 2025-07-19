@@ -971,8 +971,88 @@ public class ScanDevicesListActivity extends BaseActivity {
         // Set the secret key for the device (required for data access)
         // setKey(mst03Entity.getMacAddress()); // Moved to Connected state
         
-        // Skip historical data upload as requested
-        Log.d("ScanDebug", "Historical data upload skipped as requested");
+        // Fetch historical data for local display (no backend upload)
+        Log.d("ScanDebug", "Fetching historical data for local display");
+        fetchHistoricalDataForLocalDisplay();
+    }
+    
+    private void fetchHistoricalDataForLocalDisplay() {
+        Log.d("ScanDebug", "Fetching historical data for local display - device: " + mst03Entity.getMacAddress());
+        
+        long systemTime = System.currentTimeMillis() / 1000;
+        long startTime = (systemTime - 3600 * 24) / 1000; // Last 24 hours
+        long endTime = systemTime;
+        
+        Log.d("ScanDebug", "Local query parameters - startTime: " + startTime + ", endTime: " + endTime + ", systemTime: " + systemTime);
+        
+        mBleManager.queryHistoryData(mst03Entity.getMacAddress(), 1, startTime, endTime, systemTime, 
+            new OnQueryResultListener<HistoryHtData>() {
+                @Override
+                public void OnQueryResult(boolean success, HistoryHtData historyHtData) {
+                    Log.d("ScanDebug", "Local OnQueryResult called - success: " + success + ", historyHtData: " + (historyHtData != null));
+                    if (success && historyHtData != null) {
+                        List<HtData> allData = historyHtData.getHistoryDataList();
+                        Log.d("ScanDebug", "Local historical data received: " + allData.size() + " records");
+                        
+                        // Process data for local display only
+                        processHistoricalDataForLocalDisplay(allData);
+                    } else {
+                        Log.d("ScanDebug", "Local failed to get historical data - success: " + success + ", historyHtData null: " + (historyHtData == null));
+                        // Set processing complete even if no data
+                        isDataProcessingComplete = true;
+                    }
+                }
+            });
+    }
+    
+    private void processHistoricalDataForLocalDisplay(List<HtData> htDataList) {
+        Log.d("ScanDebug", "Processing " + htDataList.size() + " historical records for local display");
+        
+        // Clear previous data
+        processedHistoricalData.clear();
+        processedExcursionData.clear();
+        
+        // Add all historical data
+        processedHistoricalData.addAll(htDataList);
+        
+        // Analyze excursions for local display
+        analyzeExcursionsForLocalDisplay(htDataList);
+        
+        // Mark processing as complete
+        isDataProcessingComplete = true;
+        Log.d("ScanDebug", "Local data processing completed - " + processedHistoricalData.size() + " records, " + processedExcursionData.size() + " excursions");
+    }
+    
+    private void analyzeExcursionsForLocalDisplay(List<HtData> htDataList) {
+        Log.d("ScanDebug", "Analyzing excursions for local display");
+        
+        if (htDataList.isEmpty()) {
+            Log.d("ScanDebug", "No data to analyze for excursions");
+            return;
+        }
+        
+        List<ExcursionData> excursions = new ArrayList<>();
+        
+        for (HtData htData : htDataList) {
+            float temperature = htData.getTemperature();
+            long timestamp = htData.getTimestamps();
+            
+            // Check if temperature is outside the 2-8°C range
+            if (temperature < 2.0f) {
+                // Low temperature excursion
+                ExcursionData excursion = new ExcursionData(temperature, timestamp, "LOW", mst03Entity.getMacAddress());
+                excursions.add(excursion);
+                Log.d("ScanDebug", "Low excursion detected: " + temperature + "°C at " + new java.util.Date(timestamp * 1000));
+            } else if (temperature > 8.0f) {
+                // High temperature excursion
+                ExcursionData excursion = new ExcursionData(temperature, timestamp, "HIGH", mst03Entity.getMacAddress());
+                excursions.add(excursion);
+                Log.d("ScanDebug", "High excursion detected: " + temperature + "°C at " + new java.util.Date(timestamp * 1000));
+            }
+        }
+        
+        processedExcursionData.addAll(excursions);
+        Log.d("ScanDebug", "Local excursion analysis completed - found " + excursions.size() + " excursions");
     }
     
     // Static methods to access processed data

@@ -356,14 +356,29 @@ public class DeviceDetailsActivity extends AppCompatActivity {
                         if (ScanDevicesListActivity.isDataProcessingComplete()) {
                             loadProcessedData();
                         } else {
-                            // Fallback to sample data if processing fails
-                            loadHistoricalData();
+                            // Show error message instead of fallback data
+                            showNoDataMessage();
                         }
                         hideLoader();
                     }
                 });
             }
         }).start();
+    }
+    
+    private void showNoDataMessage() {
+        // Show error message when no data is available
+        tvAvgTemperature.setText("--");
+        tvMinTemperature.setText("--");
+        tvMaxTemperature.setText("--");
+        tvExcursionCount.setText("--");
+        
+        // Show error message in graph area
+        lineChart.setVisibility(View.GONE);
+        tvGraphPlaceholder.setVisibility(View.VISIBLE);
+        tvGraphPlaceholder.setText("No historical data available from device");
+        
+        Log.d("DeviceDetails", "No historical data available from device");
     }
     
     private void loadProcessedData() {
@@ -390,9 +405,11 @@ public class DeviceDetailsActivity extends AppCompatActivity {
             
             updateStatisticsFromProcessedData(historicalData, excursionData);
             updateGraph();
+            Log.d("DeviceDetails", "Loaded " + historicalData.size() + " real historical records from device");
         } else {
-            // Fallback to sample data
-            loadHistoricalData();
+            // Show no data message instead of fallback
+            showNoDataMessage();
+            Log.d("DeviceDetails", "No real historical data available from device");
         }
     }
     
@@ -523,90 +540,8 @@ public class DeviceDetailsActivity extends AppCompatActivity {
     private List<Entry> alertUpperEntries = new ArrayList<>();
     private List<Entry> alertLowerEntries = new ArrayList<>();
 
-    private void loadHistoricalData() {
-        // For now, we'll create sample data
-        // In a real implementation, this would fetch from the device or database
-        createSampleData();
-        updateStatistics();
-        updateGraph();
-    }
-
-    private void createSampleData() {
-        timeLabels.clear();
-        temperatureEntries.clear();
-        alertUpperEntries.clear();
-        alertLowerEntries.clear();
-        
-        // Generate sample data with excursions outside 2-8°C range
-        for (int i = 0; i < 24; i++) {
-            float baseTemp = 5.0f; // Base temperature in the middle of 2-8°C range
-            float temp;
-            
-            // Create some excursions (temperatures outside 2-8°C range)
-            if (i == 3 || i == 4) {
-                temp = 1.5f; // Below 2°C
-            } else if (i == 8 || i == 9) {
-                temp = 9.2f; // Above 8°C
-            } else if (i == 15 || i == 16) {
-                temp = 0.8f; // Below 2°C
-            } else {
-                // Normal temperature within 2-8°C range
-                temp = baseTemp + (float) (Math.random() * 4.0f - 2.0f); // 3-7°C range
-            }
-            
-            timeLabels.add(String.format("%02d:00", i));
-            temperatureEntries.add(new Entry(i, temp));
-            alertUpperEntries.add(new Entry(i, 8.0f));
-            alertLowerEntries.add(new Entry(i, 2.0f));
-        }
-    }
-
-    private void updateStatistics() {
-        if (temperatureEntries.isEmpty()) return;
-        
-        float sum = 0;
-        float min = Float.MAX_VALUE;
-        float max = Float.MIN_VALUE;
-        // Count excursions (temperatures outside 2-8°C range)
-        int excursionCount = 0;
-        for (Entry entry : temperatureEntries) {
-            float temp = entry.getY();
-            sum += temp;
-            min = Math.min(min, temp);
-            max = Math.max(max, temp);
-            
-            if (temp > 8.0f || temp < 2.0f) {
-                excursionCount++;
-            }
-        }
-        
-        float avg = sum / temperatureEntries.size();
-        
-        tvAvgTemperature.setText(String.format("%.1f°C", avg));
-        tvMinTemperature.setText(String.format("%.1f°C", min));
-        tvMaxTemperature.setText(String.format("%.1f°C", max));
-        tvExcursionCount.setText(String.valueOf(excursionCount));
-        
-        // Color code max temperature using updated thresholds (15-35°C)
-        if (max > 35.0f) {
-            tvMaxTemperature.setTextColor(getResources().getColor(R.color.error));
-        } else if (max > 30.0f) {
-            tvMaxTemperature.setTextColor(getResources().getColor(R.color.warning));
-        } else {
-            tvMaxTemperature.setTextColor(getResources().getColor(R.color.success));
-        }
-        
-        // Color code min temperature using updated thresholds (15-35°C)
-        if (min < 15.0f) {
-            tvMinTemperature.setTextColor(getResources().getColor(R.color.error));
-        } else if (min < 18.0f) {
-            tvMinTemperature.setTextColor(getResources().getColor(R.color.warning));
-        } else {
-            tvMinTemperature.setTextColor(getResources().getColor(R.color.success));
-        }
-        
-        Log.d("DeviceDetails", "Sample statistics updated - Avg: " + avg + "°C, Min: " + min + "°C, Max: " + max + "°C, Excursions: " + excursionCount);
-    }
+    // Removed loadHistoricalData() and createSampleData() methods - no fallback data wanted
+    // Removed updateStatistics() method - only used for sample data
 
     private void updateGraph() {
         if (temperatureEntries.isEmpty()) return;
