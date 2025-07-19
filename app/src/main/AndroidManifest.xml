@@ -11,12 +11,14 @@
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature
         android:name="android.hardware.camera"
@@ -45,7 +47,7 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
         <activity
-            android:name=".ScanDevicesListActivity"
+            android:name=".MainActivity"
             android:screenOrientation="portrait"
             android:exported="true">
             <intent-filter>
@@ -54,6 +56,29 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        
+        <activity
+            android:name=".SignInActivity"
+            android:screenOrientation="portrait" />
+        
+        <activity
+            android:name=".ForgotPasswordActivity"
+            android:screenOrientation="portrait" />
+            
+        <activity
+            android:name=".VerifyOtpActivity"
+            android:screenOrientation="portrait" />
+            
+        <activity
+            android:name=".ResetPasswordActivity"
+            android:screenOrientation="portrait" />
+        
+        <activity
+            android:name=".ScanDevicesListActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".DeviceDetailsActivity"
+            android:screenOrientation="portrait" />
         <activity android:name=".DeviceConnectedCompleteActivity"
             android:screenOrientation="portrait"
             />

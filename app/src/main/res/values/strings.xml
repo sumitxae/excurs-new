@@ -23,4 +23,21 @@
 
     <string name="need_permission_continue">APP needs following permissions to continue</string>
     <string name="allow_permission_in_settings">Please allow following permissions in settings</string>
+    
+    <!-- Device Details Activity -->
+    <string name="device_details">Device Details</string>
+    <string name="device_information">Device Information</string>
+    <string name="battery_level">Battery Level</string>
+    <string name="firmware_version">Firmware Version</string>
+    <string name="connection_status">Connection Status</string>
+    <string name="current_temperature">Current Temperature</string>
+    <string name="temperature_history">Temperature History</string>
+    <string name="statistics">Statistics</string>
+    <string name="average">Average</string>
+    <string name="maximum">Maximum</string>
+    <string name="minimum">Minimum</string>
+    <string name="excursions">Excursions</string>
+    <string name="connected">Connected</string>
+    <string name="temperature">Temperature</string>
+    <string name="alert_range">Alert Range</string>
 </resources>

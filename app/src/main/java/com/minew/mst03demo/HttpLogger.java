@@ -20,7 +20,7 @@ import com.minew.ble.mst03.bean.HtData;
 public class HttpLogger {
     private static final String TAG = "HttpLogger";
     // Use actual IP address for real device
-    private static final String LOG_URL = "http://192.168.1.138:8000/v1/logger/log";
+    private static final String LOG_URL = "http://51.21.86.14:8000/v1/logger/log";
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
     private final OkHttpClient client;
@@ -36,6 +36,12 @@ public class HttpLogger {
     }
 
     public void logScanData(String deviceMac, float temperature, int battery, String firmwareVersion, int rssi) {
+        // Validate temperature before logging
+        if (temperature == 0.0f || Float.isNaN(temperature)) {
+            Log.w(TAG, "Skipping HTTP log for device " + deviceMac + " - invalid temperature: " + temperature);
+            return;
+        }
+        
         try {
             JSONObject logData = new JSONObject();
             logData.put("timestamp",
@@ -48,6 +54,7 @@ public class HttpLogger {
             logData.put("eventType", "scan");
 
             String jsonMessage = logData.toString();
+            Log.d(TAG, "Sending scan data to server for device: " + deviceMac + " with temperature: " + temperature + "°C");
             sendLogAsync(jsonMessage);
 
         } catch (Exception e) {
@@ -75,8 +82,14 @@ public class HttpLogger {
 
     public void logCompleteDeviceData(String deviceMac, String deviceName, float temperature, String firmware,
             int battery, int rssi, List<HtData> historicalData, List<ExcursionData> excursions) {
+        // Validate temperature before logging
+        if (temperature == 0.0f || Float.isNaN(temperature)) {
+            Log.w(TAG, "Skipping complete device data log for device " + deviceMac + " - invalid temperature: " + temperature);
+            return;
+        }
+        
         Log.d(TAG, "logCompleteDeviceData called for device: " + deviceMac);
-        Log.d(TAG, "Device details - Name: " + deviceName + ", Temp: " + temperature + ", Battery: " + battery
+        Log.d(TAG, "Device details - Name: " + deviceName + ", Temp: " + temperature + "°C, Battery: " + battery
                 + ", RSSI: " + rssi);
         Log.d(TAG, "Historical data count: " + historicalData.size() + ", Excursions count: " + excursions.size());
 

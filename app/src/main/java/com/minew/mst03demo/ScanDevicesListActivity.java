@@ -8,6 +8,8 @@ import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -45,6 +47,8 @@ import com.permissionx.guolindev.request.ForwardScope;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import com.minew.ble.mst03.frames.CombinationFrame;
+import com.minew.ble.v3.enums.FrameType;
 
 public class ScanDevicesListActivity extends BaseActivity {
 
@@ -62,18 +66,29 @@ public class ScanDevicesListActivity extends BaseActivity {
     private List<ExcursionData> excursionDataList = new ArrayList<>();
     private List<MST03Entity> allDiscoveredDevices = new ArrayList<>();
     private List<MST03Entity> filteredDevices = new ArrayList<>();
+    
+    // Static data to pass to DeviceDetailsActivity
+    private static List<HtData> processedHistoricalData = new ArrayList<>();
+    private static List<ExcursionData> processedExcursionData = new ArrayList<>();
+    private static boolean isDataProcessingComplete = false;
     private boolean isSearchMode = false;
     private boolean isClearingSearch = false; 
     private boolean isConnecting = false; 
     private android.os.Handler connectionTimeoutHandler = new android.os.Handler();
     private android.os.Handler searchDebounceHandler = new android.os.Handler();
-    private static final int SEARCH_DEBOUNCE_DELAY = 500; 
+    private static final int SEARCH_DEBOUNCE_DELAY = 500;
+    private DeviceDiscoveryManager deviceManager;
+    private DeviceDiscoveryManager.OnDevicesUpdatedListener deviceUpdateListener; 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         binding = ActivityScanDevicesBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
-        
+
+        // Remove toolbar setup and menu inflation
+        // Set up custom kebab menu
+        binding.btnKebabMenu.setOnClickListener(v -> showCustomMenu(v));
+
         View decor = getWindow().getDecorView();
         decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         initRefresh();
@@ -82,14 +97,65 @@ public class ScanDevicesListActivity extends BaseActivity {
         initBleManager();
         initBlePermission();
         
+        // Initialize device manager and listen for updates
+        deviceManager = DeviceDiscoveryManager.getInstance();
+        deviceUpdateListener = new DeviceDiscoveryManager.OnDevicesUpdatedListener() {
+            @Override
+            public void onDevicesUpdated(List<MST03Entity> devices) {
+                runOnUiThread(() -> {
+                    Log.d("ScanDebug", "Received " + devices.size() + " devices from background service");
+                    updateAllDiscoveredDevices(devices);
+                    
+                    // Update UI based on current search mode
+                    if (isSearchMode && binding.etSearch.getText().toString().trim().length() > 0) {
+                        // Re-apply current search filter
+                        String currentSearchText = binding.etSearch.getText().toString().trim();
+                        filterDevices(currentSearchText);
+                    } else {
+                        mDevicesListAdapter.setList(allDiscoveredDevices);
+                    }
+                });
+            }
+        };
+        deviceManager.addListener(deviceUpdateListener);
         
-        startBackgroundScanService();
-        
+        // Don't start background service here - wait for permissions
+        // startBackgroundScanService();
         
         httpLogger = new HttpLogger();
         
-        
         setupSearchFunctionality();
+    }
+
+    private void showCustomMenu(View anchor) {
+        android.view.LayoutInflater inflater = android.view.LayoutInflater.from(this);
+        View menuView = inflater.inflate(R.layout.menu_logout_popup, null);
+        android.widget.TextView logoutBtn = menuView.findViewById(R.id.menu_logout);
+        android.widget.PopupWindow popup = new android.widget.PopupWindow(menuView,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                true);
+        popup.setElevation(16f);
+        popup.setBackgroundDrawable(getDrawable(R.drawable.bg_popup_menu));
+        popup.setOutsideTouchable(true);
+        logoutBtn.setOnClickListener(v -> {
+            popup.dismiss();
+            handleLogout();
+        });
+        // Show below the kebab icon, aligned right
+        menuView.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        int xOff = anchor.getWidth() - menuView.getMeasuredWidth();
+        popup.showAsDropDown(anchor, xOff, 0);
+    }
+    
+    private void handleLogout() {
+        AuthManager authManager = AuthManager.getInstance(this);
+        authManager.logout();
+        
+        Intent intent = new Intent(this, SignInActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(intent);
+        finish();
     }
     
     private void setupSearchFunctionality() {
@@ -256,20 +322,11 @@ public class ScanDevicesListActivity extends BaseActivity {
             for (MST03Entity device : allDiscoveredDevices) {
                 if (device == null) continue;
                 
-                
                 if (device.getMacAddress() != null && 
                     device.getMacAddress().toLowerCase().contains(searchLower)) {
                     filteredDevices.add(device);
                     continue;
                 }
-                
-                
-                if (device.getName() != null && 
-                    device.getName().toLowerCase().contains(searchLower)) {
-                    filteredDevices.add(device);
-                    continue;
-                }
-                
                 
                 String macWithoutColons = device.getMacAddress() != null ? 
                     device.getMacAddress().replace(":", "").toLowerCase() : "";
@@ -326,20 +383,11 @@ public class ScanDevicesListActivity extends BaseActivity {
             for (MST03Entity device : allDiscoveredDevices) {
                 if (device == null) continue;
                 
-                
                 if (device.getMacAddress() != null && 
                     device.getMacAddress().toLowerCase().contains(searchLower)) {
                     filteredDevices.add(device);
                     continue;
                 }
-                
-                
-                if (device.getName() != null && 
-                    device.getName().toLowerCase().contains(searchLower)) {
-                    filteredDevices.add(device);
-                    continue;
-                }
-                
                 
                 String macWithoutColons = device.getMacAddress() != null ? 
                     device.getMacAddress().replace(":", "").toLowerCase() : "";
@@ -425,12 +473,24 @@ public class ScanDevicesListActivity extends BaseActivity {
     protected void onDestroy() {
         super.onDestroy();
         
-        if (httpLogger != null) {
-            httpLogger.shutdown();
+        // Clean up connection timeout handler
+        if (connectionTimeoutHandler != null) {
+            connectionTimeoutHandler.removeCallbacksAndMessages(null);
         }
         
+        // Clean up search debounce handler
         if (searchDebounceHandler != null) {
             searchDebounceHandler.removeCallbacksAndMessages(null);
+        }
+        
+        // Clean up device manager listener
+        if (deviceManager != null && deviceUpdateListener != null) {
+            deviceManager.removeListener(deviceUpdateListener);
+        }
+        
+        // Shutdown HTTP logger
+        if (httpLogger != null) {
+            httpLogger.shutdown();
         }
         
         Log.d("ScanDebug", "Activity destroyed, background service continues");
@@ -448,64 +508,166 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
 
     private void initRecyclerView(){
+        Log.d("ScanDebug", "=== INIT RECYCLER VIEW STARTED ===");
         binding.recyclerView.setLayoutManager(new LinearLayoutManager(binding.recyclerView.getContext()));
         mDevicesListAdapter = new ScanDevicesListAdapter(R.layout.item_scan_device,null);
 
         binding.recyclerView.addItemDecoration(new DividerItemDecoration(this, LinearLayout.VERTICAL));
         
-        
+        Log.d("ScanDebug", "=== SETTING ADAPTER CLICK LISTENER ===");
         mDevicesListAdapter.setOnConnectClickListener(new ScanDevicesListAdapter.OnConnectClickListener() {
             @Override
             public void onConnectClick(MST03Entity device) {
-                
-                if (isConnecting) {
-                    Toast.makeText(ScanDevicesListActivity.this, "Already connecting to a device", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                
-                
-                isConnecting = true;
-                
-                
-                mDevicesListAdapter.setConnectButtonsEnabled(false);
-                
-                
-                if (mBleManager != null && mst03Entity != null) {
-                    mBleManager.disConnect(mst03Entity.getMacAddress());
-                }
-                
-                
-                hideDeviceDetailsCard();
-                
-                
-                mst03Entity = device;
-                setKey(mst03Entity.getMacAddress());
-                
-                try {
-                connectedSensor();
-                } catch (Exception e) {
-                    Log.e("ScanDebug", "Error during connection: " + e.getMessage());
-                    Toast.makeText(ScanDevicesListActivity.this, "Connection failed: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                    
-                    isConnecting = false;
-                    mDevicesListAdapter.setConnectButtonsEnabled(true);
-                    hideDeviceDetailsCard();
-                }
-                
-                
-                connectionTimeoutHandler.postDelayed(() -> {
-                    if (isConnecting) {
-                        Log.d("ScanDebug", "Connection timeout - resetting state");
-                        isConnecting = false;
-                        mDevicesListAdapter.setConnectButtonsEnabled(true);
-                        Toast.makeText(ScanDevicesListActivity.this, "Connection timeout", Toast.LENGTH_SHORT).show();
-                        hideDeviceDetailsCard();
-                    }
-                }, 30000); 
+                Log.d("ScanDebug", "=== ADAPTER CLICK LISTENER TRIGGERED ===");
+                Log.d("ScanDebug", "Device: " + device.getMacAddress());
+                Log.d("ScanDebug", "About to call connectToDeviceAndNavigate");
+                // Connect to the device and navigate to details screen
+                connectToDeviceAndNavigate(device);
+                Log.d("ScanDebug", "connectToDeviceAndNavigate called successfully");
+                Log.d("ScanDebug", "=== ADAPTER CLICK LISTENER COMPLETED ===");
             }
         });
+        Log.d("ScanDebug", "Adapter click listener set successfully");
+        
+        // Test the adapter listener
+        Log.d("ScanDebug", "Testing adapter click listener...");
+        if (mDevicesListAdapter != null) {
+            Log.d("ScanDebug", "Adapter is not null");
+            // We can't test the listener directly, but we can verify it's set
+        } else {
+            Log.e("ScanDebug", "Adapter is null!");
+        }
 
         binding.recyclerView.setAdapter(mDevicesListAdapter);
+        Log.d("ScanDebug", "=== INIT RECYCLER VIEW COMPLETED ===");
+    }
+    
+
+    
+    private void connectToDeviceAndNavigate(MST03Entity device) {
+        Log.d("ScanDebug", "=== CONNECTION ATTEMPT STARTED ===");
+        Log.d("ScanDebug", "Device: " + device.getMacAddress());
+        Log.d("ScanDebug", "isConnecting: " + isConnecting);
+        
+        if (isConnecting) {
+            Log.d("ScanDebug", "Already connecting, ignoring click");
+            Toast.makeText(this, "Already connecting to a device", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        
+        Log.d("ScanDebug", "Setting isConnecting to true");
+        isConnecting = true;
+        mst03Entity = device;
+        
+        // Disable all connect buttons during connection
+        Log.d("ScanDebug", "Disabling connect buttons");
+        mDevicesListAdapter.setConnectButtonsEnabled(false);
+        
+        // Show connection dialog
+        Log.d("ScanDebug", "Showing connection dialog");
+        WaitDialog.show("Connecting to device...");
+        
+        // Set connection timeout
+        Log.d("ScanDebug", "Setting connection timeout");
+        connectionTimeoutHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (isConnecting) {
+                    Log.d("ScanDebug", "Connection timeout - navigating to device details");
+                    isConnecting = false;
+                    mDevicesListAdapter.setConnectButtonsEnabled(true);
+                    WaitDialog.dismiss();
+                    
+                    // Extract device information for timeout navigation
+                    int batteryLevel = -1;
+                    String firmwareVersion = "Unknown";
+                    float currentTemperature = Float.NaN;
+                    
+                    if (device != null) {
+                        // Get device static info
+                        DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) device.getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
+                        if (deviceInfo != null) {
+                            batteryLevel = deviceInfo.getBattery();
+                            firmwareVersion = deviceInfo.getFirmwareVersion();
+                            Log.d("ScanDebug", "Timeout: Extracted device info - Battery: " + batteryLevel + "%, Firmware: " + firmwareVersion);
+                        }
+                        
+                        // Get current temperature from combination frame
+                        CombinationFrame comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.COMBINATION_FRAME);
+                        if (comboFrame != null) {
+                            currentTemperature = comboFrame.getTemperature();
+                            Log.d("ScanDebug", "Timeout: Extracted current temperature: " + currentTemperature + "°C");
+                        }
+                    }
+                    
+                    // Navigate to device details even if connection fails
+                    Intent intent = DeviceDetailsActivity.newIntent(ScanDevicesListActivity.this, device, batteryLevel, firmwareVersion, currentTemperature);
+                    startActivity(intent);
+                }
+            }
+        }, 8000); // 8 second timeout
+        
+        // Add a fallback navigation after 3 seconds to ensure user doesn't get stuck
+        connectionTimeoutHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (isConnecting) {
+                    Log.d("ScanDebug", "Fallback navigation triggered - connection taking too long");
+                    // Don't dismiss dialog or change state, just log for debugging
+                }
+            }
+        }, 3000); // 3 second fallback check
+        
+        // Ensure BLE manager is ready and listener is set
+        Log.d("ScanDebug", "Ensuring BLE manager is ready");
+        ensureBleManagerReady();
+        
+        // Connect to the device
+        Log.d("ScanDebug", "Attempting to connect to device: " + device.getMacAddress());
+        try {
+            if (mBleManager != null) {
+                Log.d("ScanDebug", "BLE manager is not null, calling connect");
+                mBleManager.connect(this, device);
+                Log.d("ScanDebug", "Connection request sent successfully");
+            } else {
+                Log.e("ScanDebug", "BLE manager is null, cannot connect");
+                throw new Exception("BLE manager not initialized");
+            }
+        } catch (Exception e) {
+            Log.e("ScanDebug", "Error connecting to device: " + e.getMessage());
+            e.printStackTrace();
+            isConnecting = false;
+            mDevicesListAdapter.setConnectButtonsEnabled(true);
+            WaitDialog.dismiss();
+            
+            // Extract device information for error navigation
+            int batteryLevel = -1;
+            String firmwareVersion = "Unknown";
+            float currentTemperature = Float.NaN;
+            
+            if (device != null) {
+                // Get device static info
+                DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) device.getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
+                if (deviceInfo != null) {
+                    batteryLevel = deviceInfo.getBattery();
+                    firmwareVersion = deviceInfo.getFirmwareVersion();
+                    Log.d("ScanDebug", "Error: Extracted device info - Battery: " + batteryLevel + "%, Firmware: " + firmwareVersion);
+                }
+                
+                // Get current temperature from combination frame
+                CombinationFrame comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.COMBINATION_FRAME);
+                if (comboFrame != null) {
+                    currentTemperature = comboFrame.getTemperature();
+                    Log.d("ScanDebug", "Error: Extracted current temperature: " + currentTemperature + "°C");
+                }
+            }
+            
+            // Navigate to device details even if connection fails
+            Intent intent = DeviceDetailsActivity.newIntent(ScanDevicesListActivity.this, device, batteryLevel, firmwareVersion, currentTemperature);
+            startActivity(intent);
+        }
+        
+        Log.d("ScanDebug", "=== CONNECTION ATTEMPT COMPLETED ===");
     }
 
     private void initAnimator(){
@@ -521,16 +683,45 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
 
     private void initBleManager(){
-        mBleManager = MST03SensorBleManager.getInstance();
-        Log.d("ScanDebug", "BLE manager initialized: " + (mBleManager != null));
+        try {
+            mBleManager = MST03SensorBleManager.getInstance();
+            if (mBleManager == null) {
+                Log.e("ScanDebug", "Failed to get BLE manager instance");
+                Toast.makeText(this, "Failed to initialize Bluetooth manager", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            Log.d("ScanDebug", "BLE manager initialized: " + (mBleManager != null));
+            
+            // Set the connection state listener immediately
+            setBleManagerListener();
+            Log.d("ScanDebug", "BLE manager listener set successfully");
+        } catch (Exception e) {
+            Log.e("ScanDebug", "Error initializing BLE manager: " + e.getMessage());
+            Toast.makeText(this, "Error initializing Bluetooth: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
     }
     
     private void ensureBleManagerReady() {
         if (mBleManager == null) {
             Log.d("ScanDebug", "Reinitializing BLE manager...");
-            mBleManager = MST03SensorBleManager.getInstance();
-            setBleManagerListener();
+            initBleManager();
         }
+        // Always set the listener to ensure it's active
+        setBleManagerListener();
+        Log.d("ScanDebug", "BLE manager ready check completed");
+    }
+    
+    private void setBleManagerListener(){
+        if (mBleManager != null) {
+            mBleManager.setOnConnStateListener(mConnStateListener);
+            Log.d("ScanDebug", "BLE manager listener set");
+        } else {
+            Log.e("ScanDebug", "Cannot set BLE manager listener - manager is null");
+        }
+    }
+    
+    private void removeBleManagerListener(){
+        mBleManager.setOnConnStateListener(null);
     }
     
     private void startBackgroundScanService() {
@@ -547,24 +738,17 @@ public class ScanDevicesListActivity extends BaseActivity {
             
         }
     }
-    private void setBleManagerListener(){
-        mBleManager.setOnConnStateListener(mConnStateListener);
-    }
-    private void removeBleManagerListener(){
-        mBleManager.setOnConnStateListener(null);
-    }
 
     private OnConnStateListener mConnStateListener = new OnConnStateListener() {
         @Override
         public void onUpdateConnState(String s, BleConnectionState mSensorConnectionState) {
             Log.d("ScanDebug", "Connection state changed: " + mSensorConnectionState + " for device: " + s);
             
-            
             if (mst03Entity != null && s.equals(mst03Entity.getMacAddress())) {
                 Log.d("ScanDebug", "Connection event: " + mSensorConnectionState + " for " + mst03Entity.getMacAddress());
             }
             
-            switch (mSensorConnectionState){
+            switch (mSensorConnectionState) {
                 case Connecting:
                     Log.d("TAG","Connecting");
                     updateConnectionStatus("Connecting...");
@@ -572,17 +756,49 @@ public class ScanDevicesListActivity extends BaseActivity {
                 case Connected:
                     Log.d("TAG","Connected");
                     updateConnectionStatus("Connected");
+                    
+                    // Set the secret key immediately when connected (required for authentication)
+                    if (mst03Entity != null && s.equals(mst03Entity.getMacAddress())) {
+                        Log.d("ScanDebug", "Setting authentication key for device: " + s);
+                        setKey(s);
+                    }
                     break;
                 case ConnectComplete:
                     Log.d("TAG","ConnectComplete");
                     
                     connectionTimeoutHandler.removeCallbacksAndMessages(null);
                     
+                    // Dismiss connection dialog
+                    WaitDialog.dismiss();
                     
-                    showDeviceInfoImmediately();
+                    // Extract device information for navigation
+                    int batteryLevel = -1;
+                    String firmwareVersion = "Unknown";
+                    float currentTemperature = Float.NaN;
                     
+                    if (mst03Entity != null) {
+                        // Get device static info
+                        DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) mst03Entity.getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
+                        if (deviceInfo != null) {
+                            batteryLevel = deviceInfo.getBattery();
+                            firmwareVersion = deviceInfo.getFirmwareVersion();
+                            Log.d("ScanDebug", "Extracted device info - Battery: " + batteryLevel + "%, Firmware: " + firmwareVersion);
+                        }
+                        
+                        // Get current temperature from combination frame
+                        CombinationFrame comboFrame = (CombinationFrame) mst03Entity.getMinewFrame(FrameType.COMBINATION_FRAME);
+                        if (comboFrame != null) {
+                            currentTemperature = comboFrame.getTemperature();
+                            Log.d("ScanDebug", "Extracted current temperature: " + currentTemperature + "°C");
+                        }
+                    }
                     
-                    startAsyncDataUpload();
+                    // Use the existing working connection logic
+                    connectedSensor();
+                    
+                    // Navigate to device details screen with real device data
+                    Intent intent = DeviceDetailsActivity.newIntent(ScanDevicesListActivity.this, mst03Entity, batteryLevel, firmwareVersion, currentTemperature);
+                    startActivity(intent);
                     break;
                 case Disconnect:
                     Log.d("TAG","Disconnect");
@@ -636,6 +852,8 @@ public class ScanDevicesListActivity extends BaseActivity {
                     public void onResult(boolean allGranted, @NonNull List<String> grantedList, @NonNull List<String> deniedList) {
                         if(allGranted){
                             checkoutBluetooth();
+                            // Start background service after permissions are granted
+                            startBackgroundScanService();
                         }else{
                             Toast.makeText(ScanDevicesListActivity.this, "The following permissions are denied", Toast.LENGTH_SHORT).show();
                         }
@@ -667,86 +885,18 @@ public class ScanDevicesListActivity extends BaseActivity {
 
 
     private void startScan(){
-        Log.d("ScanDebug", "Starting BLE scan...");
-        ensureBleManagerReady();
-        mDevicesListAdapter.setList(null);
+        Log.d("ScanDebug", "Foreground scan requested - but using background service for device discovery");
         
-        
+        // The background service is handling all scanning
+        // This method is kept for compatibility but doesn't start its own scan
         if (isBackgroundServiceRunning()) {
-            Log.d("ScanDebug", "Background service is running, skipping foreground scan");
-            return;
+            Log.d("ScanDebug", "Background service is running and handling device discovery");
+        } else {
+            Log.d("ScanDebug", "Background service not running, starting it...");
+            startBackgroundScanService();
         }
         
-        
-        mBleManager.startScan(this, 6 * 1000, new OnScanDevicesResultListener<MST03Entity>() {
-
-            @Override
-            public void onScanResult(List<MST03Entity> list) {
-                Log.d("ScanDebug", "Scan result received. Found " + list.size() + " devices");
-                
-                if (list.size() > 0) {
-                    
-                    updateAllDiscoveredDevices(list);
-                    
-                    for (MST03Entity device : list) {
-                        Log.d("ScanDebug", "Device found: " + device.getMacAddress() + " - " + device.getName() + " (RSSI: " + device.getRssi() + ")");
-                        
-                        
-                        float temperature = 0.0f;
-                        int battery = 0;
-                        String firmwareVersion = "Unknown";
-                        
-                        
-                        if (device.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME) != null) {
-                            com.minew.ble.mst03.frames.CombinationFrame comboFrame = 
-                                (com.minew.ble.mst03.frames.CombinationFrame) device.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
-                            temperature = comboFrame.getTemperature();
-                        }
-                        
-                        
-                        if (device.getMinewFrame(com.minew.ble.v3.enums.FrameType.DEVICE_INFORMATION_FRAME) != null) {
-                            DeviceStaticInfoFrame staticFrame = 
-                                (DeviceStaticInfoFrame) device.getMinewFrame(com.minew.ble.v3.enums.FrameType.DEVICE_INFORMATION_FRAME);
-                            battery = staticFrame.getBattery();
-                            firmwareVersion = staticFrame.getFirmwareVersion();
-                        }
-                        
-                        httpLogger.logScanData(device.getMacAddress(), temperature, battery, firmwareVersion, device.getRssi());
-                    }
-                } else {
-                    Log.d("ScanDebug", "No devices found in this scan result");
-                }
-                
-                
-                list.sort(new Comparator<MST03Entity>() {
-                    @Override
-                    public int compare(MST03Entity o1, MST03Entity o2) {
-                        return o2.getRssi() - o1.getRssi();
-                    }
-                });
-                
-                
-                if (isSearchMode && !filteredDevices.isEmpty()) {
-                    
-                    mDevicesListAdapter.setList(filteredDevices);
-                } else {
-                    
-                    mDevicesListAdapter.setList(allDiscoveredDevices);
-                }
-            }
-
-            @Override
-            public void onStopScan(List<MST03Entity> list) {
-                Log.d("ScanDebug", "Scan stopped. Total devices found: " + (list != null ? list.size() : 0));
-                
-                Log.d("ScanDebug", "Waiting 6 seconds before next scan cycle...");
-                new android.os.Handler().postDelayed(() -> {
-                    Log.d("ScanDebug", "Starting next 6-second scan cycle...");
-                    startScan();
-                }, 6000); 
-            }
-
-        });
+        // Start the animation to show scanning is active
         mObjectAnimator.start();
     }
     
@@ -784,7 +934,8 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
 
     private void stopScan(){
-        mBleManager.stopScan(this);
+        Log.d("ScanDebug", "Foreground stop scan requested - but background service continues");
+        // Only stop the animation, background service continues scanning
         mObjectAnimator.cancel();
     }
     
@@ -817,18 +968,30 @@ public class ScanDevicesListActivity extends BaseActivity {
         }
         
         
-        showDeviceDetailsCard();
+        // Set the secret key for the device (required for data access)
+        // setKey(mst03Entity.getMacAddress()); // Moved to Connected state
         
-        
-        if (mBleManager == null) {
-            Log.e("ScanDebug", "BLE manager is null, reinitializing...");
-            mBleManager = MST03SensorBleManager.getInstance();
-            setBleManagerListener();
-        }
-        
-        
-        Log.d("ScanDebug", "Attempting to connect to device: " + mst03Entity.getMacAddress());
-        mBleManager.connect(this, mst03Entity);
+        // Skip historical data upload as requested
+        Log.d("ScanDebug", "Historical data upload skipped as requested");
+    }
+    
+    // Static methods to access processed data
+    public static List<HtData> getProcessedHistoricalData() {
+        return processedHistoricalData;
+    }
+    
+    public static List<ExcursionData> getProcessedExcursionData() {
+        return processedExcursionData;
+    }
+    
+    public static boolean isDataProcessingComplete() {
+        return isDataProcessingComplete;
+    }
+    
+    public static void clearProcessedData() {
+        processedHistoricalData.clear();
+        processedExcursionData.clear();
+        isDataProcessingComplete = false;
     }
     
     private void showDeviceDetailsCard() {
@@ -1077,14 +1240,16 @@ public class ScanDevicesListActivity extends BaseActivity {
         excursionLogger = new ExcursionLogger(this, mst03Entity.getMacAddress());
         excursionLogger.logExcursions(excursionDataList);
         
+        // Store processed data for DeviceDetailsActivity
+        processedHistoricalData.clear();
+        processedHistoricalData.addAll(htDataList);
+        processedExcursionData.clear();
+        processedExcursionData.addAll(excursionDataList);
+        isDataProcessingComplete = true;
+        
+        Log.d("ScanDebug", "Data processing complete - Historical: " + htDataList.size() + ", Excursions: " + excursionDataList.size());
         
         sendCompleteDeviceDataAsync(htDataList);
-        
-        
-        final long finalFirstExcursionStartTime = firstExcursionStartTime;
-        runOnUiThread(() -> {
-            updateHistoricalDataUI(htDataList.size(), excursionDataList.size(), finalFirstExcursionStartTime);
-        });
     }
     
     private void sendCompleteDeviceData(List<HtData> htDataList) {
@@ -1168,10 +1333,20 @@ public class ScanDevicesListActivity extends BaseActivity {
             com.minew.ble.mst03.frames.CombinationFrame comboFrame = 
                 (com.minew.ble.mst03.frames.CombinationFrame) mst03Entity.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
             currentTemperature = comboFrame.getTemperature();
-            Log.d("ScanDebug", "Async current temperature from combo frame: " + currentTemperature);
+            Log.d("ScanDebug", "Async temperature from CombinationFrame: " + currentTemperature + "°C");
         } else {
             Log.d("ScanDebug", "Async no combination frame available for temperature");
         }
+        
+        // Validate temperature before HTTP logging
+        boolean hasValidTemperature = (currentTemperature != 0.0f && !Float.isNaN(currentTemperature));
+        if (!hasValidTemperature) {
+            Log.w("ScanDebug", "Invalid temperature detected: " + currentTemperature + "°C - skipping HTTP logging");
+            Log.d("ScanDebug", "Device data processing complete without HTTP logging due to invalid temperature");
+            return;
+        }
+        
+        Log.d("ScanDebug", "Valid temperature confirmed: " + currentTemperature + "°C - proceeding with HTTP logging");
         
         
         if (currentDeviceStaticInfo != null) {

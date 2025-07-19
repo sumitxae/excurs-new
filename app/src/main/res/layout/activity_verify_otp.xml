@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F8F9FA"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:gravity="center">
+
+        <!-- Header Section -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_marginBottom="32dp">
+
+            <!-- Logo -->
+            <ImageView
+                android:id="@+id/ivLogo"
+                android:layout_width="120dp"
+                android:layout_height="60dp"
+                android:src="@mipmap/ic_launcher"
+                android:layout_marginBottom="24dp"
+                android:scaleType="fitCenter" />
+
+        </LinearLayout>
+
+        <!-- OTP Verification Card -->
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="8dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="8dp"
+            app:cardBackgroundColor="#FFFFFF">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="32dp">
+
+                <!-- OTP Instructions -->
+                <TextView
+                    android:id="@+id/tvOtpInstructions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Enter the 4-digit OTP sent to your email"
+                    android:textSize="16sp"
+                    android:textColor="#6B7280"
+                    android:gravity="center"
+                    android:layout_marginBottom="24dp" />
+
+                <!-- Email Display -->
+                <TextView
+                    android:id="@+id/tvEmail"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="user@example.com"
+                    android:textSize="16sp"
+                    android:textColor="#374151"
+                    android:fontFamily="sans-serif-bold"
+                    android:gravity="center"
+                    android:layout_marginBottom="24dp" />
+
+                <!-- OTP Input Fields -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:layout_marginBottom="24dp">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etOtp1"
+                        android:layout_width="50dp"
+                        android:layout_height="50dp"
+                        android:layout_marginEnd="8dp"
+                        android:inputType="number"
+                        android:maxLength="1"
+                        android:textSize="18sp"
+                        android:gravity="center"
+                        android:background="@drawable/otp_input_background"
+                        android:textColor="#374151"
+                        android:fontFamily="sans-serif-medium" />
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etOtp2"
+                        android:layout_width="50dp"
+                        android:layout_height="50dp"
+                        android:layout_marginEnd="8dp"
+                        android:inputType="number"
+                        android:maxLength="1"
+                        android:textSize="18sp"
+                        android:gravity="center"
+                        android:background="@drawable/otp_input_background"
+                        android:textColor="#374151"
+                        android:fontFamily="sans-serif-medium" />
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etOtp3"
+                        android:layout_width="50dp"
+                        android:layout_height="50dp"
+                        android:layout_marginEnd="8dp"
+                        android:inputType="number"
+                        android:maxLength="1"
+                        android:textSize="18sp"
+                        android:gravity="center"
+                        android:background="@drawable/otp_input_background"
+                        android:textColor="#374151"
+                        android:fontFamily="sans-serif-medium" />
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etOtp4"
+                        android:layout_width="50dp"
+                        android:layout_height="50dp"
+                        android:inputType="number"
+                        android:maxLength="1"
+                        android:textSize="18sp"
+                        android:gravity="center"
+                        android:background="@drawable/otp_input_background"
+                        android:textColor="#374151"
+                        android:fontFamily="sans-serif-medium" />
+
+                </LinearLayout>
+
+                <!-- Verify OTP Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnVerifyOtp"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text="Verify OTP"
+                    android:textSize="18sp"
+                    android:textColor="#FFFFFF"
+                    android:fontFamily="sans-serif-medium"
+                    app:cornerRadius="8dp"
+                    app:backgroundTint="#EE652B"
+                    app:strokeColor="#EE652B"
+                    app:strokeWidth="0dp" />
+
+                <!-- Resend OTP Section -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:layout_marginTop="16dp">
+
+                    <TextView
+                        android:id="@+id/tvResendTimer"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Resend OTP in 1:00"
+                        android:textSize="14sp"
+                        android:textColor="#6B7280"
+                        android:visibility="visible" />
+
+                    <TextView
+                        android:id="@+id/tvResendOtp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Resend OTP"
+                        android:textSize="14sp"
+                        android:textColor="#EE652B"
+                        android:fontFamily="sans-serif-medium"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:padding="8dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:visibility="gone" />
+
+                </LinearLayout>
+
+                <!-- Back Button -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:layout_marginTop="16dp">
+
+                    <TextView
+                        android:id="@+id/tvBack"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="← Back to Sign In"
+                        android:textSize="14sp"
+                        android:textColor="#1F2136"
+                        android:fontFamily="sans-serif-medium"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:padding="8dp"
+                        android:clickable="true"
+                        android:focusable="true" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </androidx.cardview.widget.CardView>
+
+    </LinearLayout>
+
+</ScrollView> 

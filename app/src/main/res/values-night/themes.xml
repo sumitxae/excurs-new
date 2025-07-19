@@ -18,5 +18,8 @@
         <item name="textAllCaps">false</item>
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
+        <item name="popupMenuStyle">@style/CustomPopupMenuStyle</item>
+        <item name="android:popupMenuStyle">@style/CustomPopupMenuStyle</item>
+        <item name="android:actionBarItemBackground">@drawable/bg_menu_item</item>
     </style>
 </resources>
