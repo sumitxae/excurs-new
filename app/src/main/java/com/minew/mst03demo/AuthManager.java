@@ -16,6 +16,7 @@ public class AuthManager {
     private static final String KEY_TOKEN = "auth_token";
     private static final String KEY_USER_EMAIL = "user_email";
     private static final String KEY_IS_LOGGED_IN = "is_logged_in";
+    private static final String KEY_USER_ROLE = "user_role";
     
     private static AuthManager instance;
     private final Context context;
@@ -111,8 +112,12 @@ public class AuthManager {
                 if (response.isSuccessful() && response.body() != null) {
                     AuthModels.LoginResponse loginResponse = response.body();
                     if (loginResponse.isSuccess()) {
-                        // Save authentication data
-                        saveAuthData(loginResponse.getToken(), email);
+                        // Save authentication data with role
+                        String role = null;
+                        if (loginResponse.getUser() != null) {
+                            role = loginResponse.getUser().getRole();
+                        }
+                        saveAuthData(loginResponse.getToken(), email, role);
                     }
                     callback.onSuccess(loginResponse);
                 } else {
@@ -230,8 +235,12 @@ public class AuthManager {
                 if (response.isSuccessful() && response.body() != null) {
                     AuthModels.InitPasswordResponse initPasswordResponse = response.body();
                     if (initPasswordResponse.isSuccess()) {
-                        // Save authentication data
-                        saveAuthData(initPasswordResponse.getToken(), initPasswordResponse.getUser().getEmail());
+                        // Save authentication data with role
+                        String role = null;
+                        if (initPasswordResponse.getUser() != null) {
+                            role = initPasswordResponse.getUser().getRole();
+                        }
+                        saveAuthData(initPasswordResponse.getToken(), initPasswordResponse.getUser().getEmail(), role);
                     }
                     callback.onSuccess(initPasswordResponse);
                 } else {
@@ -266,9 +275,14 @@ public class AuthManager {
     }
     
     public void saveAuthData(String token, String email) {
+        saveAuthData(token, email, null);
+    }
+    
+    public void saveAuthData(String token, String email, String role) {
         SharedPreferences.Editor editor = prefs.edit();
         editor.putString(KEY_TOKEN, token);
         editor.putString(KEY_USER_EMAIL, email);
+        editor.putString(KEY_USER_ROLE, role);
         editor.putBoolean(KEY_IS_LOGGED_IN, true);
         editor.apply();
     }
@@ -277,6 +291,7 @@ public class AuthManager {
         SharedPreferences.Editor editor = prefs.edit();
         editor.remove(KEY_TOKEN);
         editor.remove(KEY_USER_EMAIL);
+        editor.remove(KEY_USER_ROLE);
         editor.putBoolean(KEY_IS_LOGGED_IN, false);
         editor.apply();
     }
@@ -291,5 +306,9 @@ public class AuthManager {
     
     public String getUserEmail() {
         return prefs.getString(KEY_USER_EMAIL, null);
+    }
+    
+    public String getUserRole() {
+        return prefs.getString(KEY_USER_ROLE, null);
     }
 } 

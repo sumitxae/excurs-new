@@ -144,35 +144,59 @@
 
                     <!-- Firmware Version -->
                     <LinearLayout
+                        android:id="@+id/firmware_container"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
+                        android:orientation="vertical"
                         android:layout_marginBottom="12dp">
 
-                        <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:src="@drawable/ic_firmware"
-                            android:contentDescription="Firmware"
-                            android:tint="@color/text_secondary" />
-
-                        <TextView
-                            android:layout_width="0dp"
+                        <LinearLayout
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/firmware_version"
-                            android:textColor="@color/text_primary"
-                            android:textSize="14sp"
-                            android:layout_marginStart="12dp" />
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="8dp">
 
-                        <TextView
-                            android:id="@+id/tv_firmware_version"
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:src="@drawable/ic_firmware"
+                                android:contentDescription="Firmware"
+                                android:tint="@color/text_secondary" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/firmware_version"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp"
+                                android:layout_marginStart="12dp" />
+
+                            <TextView
+                                android:id="@+id/tv_firmware_version"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Loading..."
+                                android:textColor="@color/text_secondary"
+                                android:textSize="14sp" />
+
+                        </LinearLayout>
+
+                        <!-- Firmware Upgrade Button (Admin Only) -->
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_upgrade_firmware"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Loading..."
-                            android:textColor="@color/text_secondary"
-                            android:textSize="14sp" />
+                            android:layout_gravity="end"
+                            android:text="Upgrade Firmware"
+                            android:textSize="12sp"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
+                            android:paddingTop="8dp"
+                            android:paddingBottom="8dp"
+                            android:visibility="gone"
+                            style="@style/Widget.Material3.Button.OutlinedButton" />
 
                     </LinearLayout>
 

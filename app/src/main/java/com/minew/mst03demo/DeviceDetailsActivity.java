@@ -53,6 +53,8 @@ public class DeviceDetailsActivity extends AppCompatActivity {
     private TextView tvGraphPlaceholder;
     private View loadingOverlay;
     private TextView tvLoadingText;
+    private View firmwareContainer;
+    private com.google.android.material.button.MaterialButton btnUpgradeFirmware;
 
     public static Intent newIntent(Context context, MST03Entity device, int batteryLevel, String firmwareVersion, float currentTemperature) {
         Intent intent = new Intent(context, DeviceDetailsActivity.class);
@@ -91,6 +93,7 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         initViews();
         setupBackButton();
         setupGraph();
+        setupRoleBasedUI();
         
         // Load broadcast data immediately using the passed data
         loadBroadcastDataWithExtras(batteryLevel, firmwareVersion, currentTemperature);
@@ -116,10 +119,44 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         tvGraphPlaceholder = findViewById(R.id.tv_graph_placeholder);
         loadingOverlay = findViewById(R.id.loading_overlay);
         tvLoadingText = findViewById(R.id.tv_loading_text);
+        firmwareContainer = findViewById(R.id.firmware_container);
+        btnUpgradeFirmware = findViewById(R.id.btn_upgrade_firmware);
     }
 
     private void setupBackButton() {
         findViewById(R.id.btn_back).setOnClickListener(v -> finish());
+    }
+    
+    private void setupRoleBasedUI() {
+        // Get current user's role
+        AuthManager authManager = AuthManager.getInstance(this);
+        String userRole = authManager.getUserRole();
+        
+        Log.d("DeviceDetails", "Current user role: " + (userRole != null ? userRole : "null"));
+        
+        // Check if user is admin
+        boolean isAdmin = "admin".equalsIgnoreCase(userRole);
+        
+        if (isAdmin) {
+            // Show firmware container and upgrade button for admin
+            firmwareContainer.setVisibility(View.VISIBLE);
+            btnUpgradeFirmware.setVisibility(View.VISIBLE);
+            
+            // Set up firmware upgrade button click listener
+            btnUpgradeFirmware.setOnClickListener(v -> handleFirmwareUpgrade());
+            
+            Log.d("DeviceDetails", "User is admin - showing firmware controls");
+        } else {
+            // Hide firmware container for regular users
+            firmwareContainer.setVisibility(View.GONE);
+            Log.d("DeviceDetails", "User is not admin - hiding firmware controls. Role: " + userRole);
+        }
+    }
+    
+    private void handleFirmwareUpgrade() {
+        // TODO: Implement firmware upgrade logic
+        Toast.makeText(this, "Firmware upgrade functionality coming soon!", Toast.LENGTH_SHORT).show();
+        Log.d("DeviceDetails", "Firmware upgrade button clicked");
     }
     
     private void showLoader() {
@@ -167,7 +204,7 @@ public class DeviceDetailsActivity extends AppCompatActivity {
             Log.w("DeviceDetails", "❌ No battery level data available");
         }
         
-        // Set firmware version from extras
+        // Set firmware version from extras (only visible to admin users)
         if (firmwareVersion != null && !firmwareVersion.isEmpty()) {
             tvFirmwareVersion.setText(firmwareVersion);
             Log.d("DeviceDetails", "✅ Firmware version set from extras: " + firmwareVersion);
@@ -238,7 +275,7 @@ public class DeviceDetailsActivity extends AppCompatActivity {
                     tvBatteryLevel.setTextColor(getResources().getColor(R.color.success));
                 }
                 
-                // Set firmware version
+                // Set firmware version (only visible to admin users)
                 String firmwareVersion = deviceStaticInfo.getFirmwareVersion();
                 tvFirmwareVersion.setText(firmwareVersion);
                 Log.d("DeviceDetails", "✅ Firmware version set: " + firmwareVersion);

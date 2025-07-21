@@ -459,6 +459,7 @@ public class ScanDevicesListActivity extends BaseActivity {
     protected void onStart() {
         super.onStart();
         setBleManagerListener();
+        startScan(); // Ensure scanning resumes when returning to this screen
     }
 
     @Override

@@ -148,6 +148,7 @@ public class VerifyOtpActivity extends AppCompatActivity {
                         // Save the access token from OTP verification
                         String accessToken = result.getAccessToken();
                         if (accessToken != null) {
+                            // For OTP verification, we don't have role info yet, so save without role
                             authManager.saveAuthData(accessToken, email);
                         }
                         
