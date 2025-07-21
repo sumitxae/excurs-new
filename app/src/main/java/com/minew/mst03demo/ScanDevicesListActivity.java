@@ -755,12 +755,40 @@ public class ScanDevicesListActivity extends BaseActivity {
                     break;
                 case Connected:
                     Log.d("TAG","Connected");
-                    updateConnectionStatus("Connected");
+                    updateConnectionStatus("Connected - Authenticating...");
                     
                     // Set the secret key immediately when connected (required for authentication)
                     if (mst03Entity != null && s.equals(mst03Entity.getMacAddress())) {
                         Log.d("ScanDebug", "Setting authentication key for device: " + s);
                         setKey(s);
+                    }
+                    break;
+                case AuthenticateSuccess:
+                    Log.d("TAG","AuthenticateSuccess");
+                    updateConnectionStatus("Authenticated Successfully");
+                    Log.d("ScanDebug", "Authentication successful for device: " + s);
+                    break;
+                case AuthenticateFail:
+                    Log.d("TAG","AuthenticateFail");
+                    updateConnectionStatus("Authentication Failed");
+                    Log.e("ScanDebug", "Authentication failed for device: " + s);
+                    
+                    // Handle authentication failure
+                    if (mst03Entity != null && s.equals(mst03Entity.getMacAddress())) {
+                        connectionTimeoutHandler.removeCallbacksAndMessages(null);
+                        WaitDialog.dismiss();
+                        
+                        // Show error and reset connection state
+                        runOnUiThread(() -> {
+                            Toast.makeText(ScanDevicesListActivity.this, "Authentication failed. Please try again.", Toast.LENGTH_LONG).show();
+                            isConnecting = false;
+                            mDevicesListAdapter.setConnectButtonsEnabled(true);
+                            
+                            // Disconnect from device
+                            if (mBleManager != null) {
+                                mBleManager.disConnect(s);
+                            }
+                        });
                     }
                     break;
                 case ConnectComplete:
@@ -782,6 +810,7 @@ public class ScanDevicesListActivity extends BaseActivity {
                         if (deviceInfo != null) {
                             batteryLevel = deviceInfo.getBattery();
                             firmwareVersion = deviceInfo.getFirmwareVersion();
+                            currentDeviceStaticInfo = deviceInfo;
                             Log.d("ScanDebug", "Extracted device info - Battery: " + batteryLevel + "%, Firmware: " + firmwareVersion);
                         }
                         
@@ -815,6 +844,7 @@ public class ScanDevicesListActivity extends BaseActivity {
                     break;
 
                 default:
+                    Log.d("ScanDebug", "Unhandled connection state: " + mSensorConnectionState);
                     break;
             }
         }
@@ -979,30 +1009,110 @@ public class ScanDevicesListActivity extends BaseActivity {
     private void fetchHistoricalDataForLocalDisplay() {
         Log.d("ScanDebug", "Fetching historical data for local display - device: " + mst03Entity.getMacAddress());
         
+        // Set processing as not complete initially
+        isDataProcessingComplete = false;
+        
         long systemTime = System.currentTimeMillis() / 1000;
-        long startTime = (systemTime - 3600 * 24) / 1000; // Last 24 hours
+        // Get data from last 24 hours - fix the calculation
+        long startTime = systemTime - (24 * 60 * 60); // Last 24 hours in seconds
         long endTime = systemTime;
         
-        Log.d("ScanDebug", "Local query parameters - startTime: " + startTime + ", endTime: " + endTime + ", systemTime: " + systemTime);
+        Log.d("ScanDebug", "Local query parameters:");
+        Log.d("ScanDebug", "  - systemTime: " + systemTime + " (" + new java.util.Date(systemTime * 1000) + ")");
+        Log.d("ScanDebug", "  - startTime: " + startTime + " (" + new java.util.Date(startTime * 1000) + ")");
+        Log.d("ScanDebug", "  - endTime: " + endTime + " (" + new java.util.Date(endTime * 1000) + ")");
+        Log.d("ScanDebug", "  - Time range: " + (endTime - startTime) + " seconds (" + (endTime - startTime) / 3600 + " hours)");
         
-        mBleManager.queryHistoryData(mst03Entity.getMacAddress(), 1, startTime, endTime, systemTime, 
-            new OnQueryResultListener<HistoryHtData>() {
-                @Override
-                public void OnQueryResult(boolean success, HistoryHtData historyHtData) {
-                    Log.d("ScanDebug", "Local OnQueryResult called - success: " + success + ", historyHtData: " + (historyHtData != null));
-                    if (success && historyHtData != null) {
-                        List<HtData> allData = historyHtData.getHistoryDataList();
-                        Log.d("ScanDebug", "Local historical data received: " + allData.size() + " records");
-                        
-                        // Process data for local display only
-                        processHistoricalDataForLocalDisplay(allData);
-                    } else {
-                        Log.d("ScanDebug", "Local failed to get historical data - success: " + success + ", historyHtData null: " + (historyHtData == null));
-                        // Set processing complete even if no data
-                        isDataProcessingComplete = true;
+        try {
+            // Try with rules=1 for time-based query as per SDK documentation
+            Log.d("ScanDebug", "Calling queryHistoryData with rules=1 (time-based query)");
+            mBleManager.queryHistoryData(mst03Entity.getMacAddress(), 1, startTime, endTime, systemTime, 
+                new OnQueryResultListener<HistoryHtData>() {
+                    @Override
+                    public void OnQueryResult(boolean success, HistoryHtData historyHtData) {
+                        Log.d("ScanDebug", "Local OnQueryResult called - success: " + success + ", historyHtData: " + (historyHtData != null));
+                        if (success && historyHtData != null) {
+                            List<HtData> allData = historyHtData.getHistoryDataList();
+                            Log.d("ScanDebug", "Local historical data received: " + allData.size() + " records");
+                            
+                            if (allData.isEmpty()) {
+                                Log.d("ScanDebug", "Historical data list is empty - no data in the specified time range");
+                                // Try fallback with rules=0 (all data)
+                                tryFallbackQuery(systemTime);
+                            } else {
+                                Log.d("ScanDebug", "First record: " + allData.get(0).getTemperature() + "°C at " + new java.util.Date(allData.get(0).getTimestamps() * 1000));
+                                Log.d("ScanDebug", "Last record: " + allData.get(allData.size()-1).getTemperature() + "°C at " + new java.util.Date(allData.get(allData.size()-1).getTimestamps() * 1000));
+                                
+                                // Process data for local display only
+                                processHistoricalDataForLocalDisplay(allData);
+                            }
+                        } else {
+                            Log.d("ScanDebug", "Local failed to get historical data - success: " + success + ", historyHtData null: " + (historyHtData == null));
+                            
+                            // Try fallback with rules=0 (all data)
+                            tryFallbackQuery(systemTime);
+                        }
                     }
-                }
-            });
+                });
+        } catch (Exception e) {
+            Log.e("ScanDebug", "Exception during historical data query: " + e.getMessage());
+            e.printStackTrace();
+            
+            // Try fallback with rules=0 (all data)
+            tryFallbackQuery(systemTime);
+        }
+    }
+    
+    private void tryFallbackQuery(long systemTime) {
+        Log.d("ScanDebug", "Trying fallback with rules=0 (all data)");
+        try {
+            mBleManager.queryHistoryData(mst03Entity.getMacAddress(), 0, 0, 0, systemTime, 
+                new OnQueryResultListener<HistoryHtData>() {
+                    @Override
+                    public void OnQueryResult(boolean fallbackSuccess, HistoryHtData fallbackHistoryHtData) {
+                        Log.d("ScanDebug", "Fallback OnQueryResult - success: " + fallbackSuccess + ", data: " + (fallbackHistoryHtData != null));
+                        if (fallbackSuccess && fallbackHistoryHtData != null) {
+                            List<HtData> fallbackData = fallbackHistoryHtData.getHistoryDataList();
+                            Log.d("ScanDebug", "Fallback historical data received: " + fallbackData.size() + " records");
+                            
+                            if (fallbackData.isEmpty()) {
+                                Log.d("ScanDebug", "Both time-based and all-data queries returned empty data");
+                                handleNoDataAvailable();
+                            } else {
+                                Log.d("ScanDebug", "Fallback data - First record: " + fallbackData.get(0).getTemperature() + "°C at " + new java.util.Date(fallbackData.get(0).getTimestamps() * 1000));
+                                Log.d("ScanDebug", "Fallback data - Last record: " + fallbackData.get(fallbackData.size()-1).getTemperature() + "°C at " + new java.util.Date(fallbackData.get(fallbackData.size()-1).getTimestamps() * 1000));
+                                processHistoricalDataForLocalDisplay(fallbackData);
+                            }
+                        } else {
+                            Log.d("ScanDebug", "Both time-based and all-data queries failed");
+                            handleNoDataAvailable();
+                        }
+                    }
+                });
+        } catch (Exception e) {
+            Log.e("ScanDebug", "Exception during fallback query: " + e.getMessage());
+            e.printStackTrace();
+            handleNoDataAvailable();
+        }
+    }
+    
+    private void handleNoDataAvailable() {
+        Log.d("ScanDebug", "No historical data available from device");
+        // Set processing complete even if no data
+        isDataProcessingComplete = true;
+        Log.d("ScanDebug", "Data processing marked as complete (no data available)");
+        
+        // Disconnect from device even if no data was received
+        if (mst03Entity != null && mBleManager != null) {
+            Log.d("ScanDebug", "Disconnecting from device after failed data fetch: " + mst03Entity.getMacAddress());
+            mBleManager.disConnect(mst03Entity.getMacAddress());
+            
+            // Reset connection state
+            isConnecting = false;
+            mDevicesListAdapter.setConnectButtonsEnabled(true);
+            
+            Log.d("ScanDebug", "Device disconnected after failed data fetch");
+        }
     }
     
     private void processHistoricalDataForLocalDisplay(List<HtData> htDataList) {
@@ -1021,6 +1131,18 @@ public class ScanDevicesListActivity extends BaseActivity {
         // Mark processing as complete
         isDataProcessingComplete = true;
         Log.d("ScanDebug", "Local data processing completed - " + processedHistoricalData.size() + " records, " + processedExcursionData.size() + " excursions");
+        
+        // Disconnect from device immediately after data processing is complete
+        if (mst03Entity != null && mBleManager != null) {
+            Log.d("ScanDebug", "Disconnecting from device after data processing: " + mst03Entity.getMacAddress());
+            mBleManager.disConnect(mst03Entity.getMacAddress());
+            
+            // Reset connection state but keep the device entity for display purposes
+            isConnecting = false;
+            mDevicesListAdapter.setConnectButtonsEnabled(true);
+            
+            Log.d("ScanDebug", "Device disconnected after data fetch - user can now connect to other devices");
+        }
     }
     
     private void analyzeExcursionsForLocalDisplay(List<HtData> htDataList) {

@@ -339,10 +339,27 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                // Wait for data processing to complete - no timeout, let it take as long as needed
-                while (!ScanDevicesListActivity.isDataProcessingComplete()) {
+                // First, check if data processing has already started
+                if (!ScanDevicesListActivity.isDataProcessingComplete()) {
+                    Log.d("DeviceDetails", "Data processing not complete, checking if it was started...");
+                    
+                    // If no data processing is happening, we might need to trigger it
+                    // This can happen if the connection was established but data fetching failed
+                    if (ScanDevicesListActivity.getProcessedHistoricalData().isEmpty()) {
+                        Log.d("DeviceDetails", "No processed data available, data fetching may have failed");
+                    }
+                }
+                
+                // Wait for data processing to complete with a timeout
+                int timeoutSeconds = 180; // 60 second timeout
+                int checkIntervalMs = 500; // Check every 500ms
+                int maxChecks = (timeoutSeconds * 1000) / checkIntervalMs;
+                int checks = 0;
+                
+                while (!ScanDevicesListActivity.isDataProcessingComplete() && checks < maxChecks) {
                     try {
-                        Thread.sleep(500); // Check every 500ms
+                        Thread.sleep(checkIntervalMs);
+                        checks++;
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                         break;
@@ -356,14 +373,30 @@ public class DeviceDetailsActivity extends AppCompatActivity {
                         if (ScanDevicesListActivity.isDataProcessingComplete()) {
                             loadProcessedData();
                         } else {
-                            // Show error message instead of fallback data
-                            showNoDataMessage();
+                            // Show timeout message
+                            Log.d("DeviceDetails", "Data loading timed out after " + timeoutSeconds + " seconds");
+                            showTimeoutMessage();
                         }
                         hideLoader();
                     }
                 });
             }
         }).start();
+    }
+    
+    private void showTimeoutMessage() {
+        // Show timeout message when data loading takes too long
+        tvAvgTemperature.setText("--");
+        tvMinTemperature.setText("--");
+        tvMaxTemperature.setText("--");
+        tvExcursionCount.setText("--");
+        
+        // Show timeout message in graph area
+        lineChart.setVisibility(View.GONE);
+        tvGraphPlaceholder.setVisibility(View.VISIBLE);
+        tvGraphPlaceholder.setText("Data loading timed out. Please try reconnecting to the device.");
+        
+        Log.d("DeviceDetails", "Data loading timed out - showing timeout message");
     }
     
     private void showNoDataMessage() {
