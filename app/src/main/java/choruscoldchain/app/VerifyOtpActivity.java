@@ -1,23 +1,29 @@
 package choruscoldchain.app;
 
 import android.content.Intent;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.View;
+import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.textfield.TextInputEditText;
 import android.widget.TextView;
+import java.io.IOException;
+import java.io.InputStream;
 
 public class VerifyOtpActivity extends AppCompatActivity {
     private static final String TAG = "VerifyOtpActivity";
     
-    private TextInputEditText etOtp1, etOtp2, etOtp3, etOtp4;
-    private MaterialButton btnVerifyOtp;
-    private TextView tvEmail, tvResendTimer, tvResendOtp, tvBack;
+    private EditText etOtp1, etOtp2, etOtp3, etOtp4;
+    private MaterialButton btnVerify, btnBackToLogin;
+    private TextView tvResendOtp;
+    private ImageView ivChorusLogo;
     
     private AuthManager authManager;
     private String email, hashedUser;
@@ -29,6 +35,11 @@ public class VerifyOtpActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_verify_otp);
+        
+        // Set status bar text color to black
+        getWindow().getDecorView().setSystemUiVisibility(
+            getWindow().getDecorView().getSystemUiVisibility() | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        );
         
         // Get data from intent
         Intent intent = getIntent();
@@ -46,6 +57,7 @@ public class VerifyOtpActivity extends AppCompatActivity {
         
         initViews();
         setupListeners();
+        loadChorusLogo();
         startTimer();
         
         // Auto focus first input
@@ -57,27 +69,43 @@ public class VerifyOtpActivity extends AppCompatActivity {
         etOtp2 = findViewById(R.id.etOtp2);
         etOtp3 = findViewById(R.id.etOtp3);
         etOtp4 = findViewById(R.id.etOtp4);
-        btnVerifyOtp = findViewById(R.id.btnVerifyOtp);
-        tvEmail = findViewById(R.id.tvEmail);
-        tvResendTimer = findViewById(R.id.tvResendTimer);
+        btnVerify = findViewById(R.id.btnVerify);
+        btnBackToLogin = findViewById(R.id.btnBackToLogin);
         tvResendOtp = findViewById(R.id.tvResendOtp);
-        tvBack = findViewById(R.id.tvBack);
+        ivChorusLogo = findViewById(R.id.ivChorusLogo);
+    }
+    
+    private void loadChorusLogo() {
+        // Try to load chorus logo from assets in order of preference
+        String[] logoPaths = {
+            "images/chorus.png",           // Main chorus logo
+            "chorus_logo.png",             // Alternative chorus logo
+            "images/chorusWhite.jpeg"      // White version if needed
+        };
         
-        // Set email
-        tvEmail.setText(email);
-        
-        // Update back button text based on source
-        if (fromForgotPassword) {
-            tvBack.setText("← Back to Forgot Password");
-        } else {
-            tvBack.setText("← Back to Sign In");
+        for (String logoPath : logoPaths) {
+            try {
+                InputStream inputStream = getAssets().open(logoPath);
+                Drawable drawable = Drawable.createFromStream(inputStream, null);
+                ivChorusLogo.setImageDrawable(drawable);
+                inputStream.close();
+                Log.d(TAG, "Successfully loaded chorus logo from: " + logoPath);
+                return; // Successfully loaded, exit the method
+            } catch (IOException e) {
+                Log.d(TAG, "Could not load chorus logo from: " + logoPath);
+                // Continue to next option
+            }
         }
+        
+        // Fallback to drawable if all asset loading fails
+        Log.w(TAG, "Falling back to drawable chorus logo");
+        ivChorusLogo.setImageResource(R.drawable.ic_chorus_logo);
     }
     
     private void setupListeners() {
-        btnVerifyOtp.setOnClickListener(v -> handleVerifyOtp());
+        btnVerify.setOnClickListener(v -> handleVerify());
+        btnBackToLogin.setOnClickListener(v -> handleBack());
         tvResendOtp.setOnClickListener(v -> handleResendOtp());
-        tvBack.setOnClickListener(v -> handleBack());
         
         // Setup OTP input listeners for auto-focus
         setupOtpInputListeners();
@@ -121,7 +149,7 @@ public class VerifyOtpActivity extends AppCompatActivity {
         etOtp4.addTextChangedListener(otpWatcher);
     }
     
-    private void handleVerifyOtp() {
+    private void handleVerify() {
         String otp1 = etOtp1.getText().toString();
         String otp2 = etOtp2.getText().toString();
         String otp3 = etOtp3.getText().toString();
@@ -130,19 +158,19 @@ public class VerifyOtpActivity extends AppCompatActivity {
         String fullOtp = otp1 + otp2 + otp3 + otp4;
         
         if (fullOtp.length() != 4) {
-            Toast.makeText(this, "Please enter complete 4-digit OTP", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Please enter the complete 4-digit OTP.", Toast.LENGTH_LONG).show();
             return;
         }
         
-        btnVerifyOtp.setEnabled(false);
-        btnVerifyOtp.setText("Verifying...");
+        btnVerify.setEnabled(false);
+        btnVerify.setText("Loading...");
         
         authManager.verifyOtp(hashedUser.toLowerCase(), fullOtp, new AuthManager.AuthCallback<AuthModels.VerifyOtpResponse>() {
             @Override
             public void onSuccess(AuthModels.VerifyOtpResponse result) {
                 runOnUiThread(() -> {
-                    btnVerifyOtp.setEnabled(true);
-                    btnVerifyOtp.setText("Verify OTP");
+                    btnVerify.setEnabled(true);
+                    btnVerify.setText("Verify");
                     
                     if (result.isSuccess()) {
                         // Save the access token from OTP verification
@@ -156,8 +184,7 @@ public class VerifyOtpActivity extends AppCompatActivity {
                         navigateToResetPassword();
                     } else {
                         Toast.makeText(VerifyOtpActivity.this, 
-                            result.getMessage() != null ? result.getMessage() : "Invalid OTP", 
-                            Toast.LENGTH_LONG).show();
+                            "Invalid OTP. Please try again.", Toast.LENGTH_LONG).show();
                     }
                 });
             }
@@ -165,9 +192,10 @@ public class VerifyOtpActivity extends AppCompatActivity {
             @Override
             public void onError(String error) {
                 runOnUiThread(() -> {
-                    btnVerifyOtp.setEnabled(true);
-                    btnVerifyOtp.setText("Verify OTP");
-                    Toast.makeText(VerifyOtpActivity.this, error, Toast.LENGTH_LONG).show();
+                    btnVerify.setEnabled(true);
+                    btnVerify.setText("Verify");
+                    Toast.makeText(VerifyOtpActivity.this, 
+                        "Something went wrong. Please try again.", Toast.LENGTH_LONG).show();
                 });
             }
         });
@@ -176,20 +204,25 @@ public class VerifyOtpActivity extends AppCompatActivity {
     private void handleResendOtp() {
         if (timeLeft > 0) return;
         
+        btnVerify.setEnabled(false);
+        btnVerify.setText("Loading...");
+        
         authManager.forgotPassword(email, new AuthManager.AuthCallback<AuthModels.ForgotPasswordResponse>() {
             @Override
             public void onSuccess(AuthModels.ForgotPasswordResponse result) {
                 runOnUiThread(() -> {
+                    btnVerify.setEnabled(true);
+                    btnVerify.setText("Verify");
+                    
                     if (result.isSuccess()) {
-                        Toast.makeText(VerifyOtpActivity.this, "OTP resent to your email", Toast.LENGTH_LONG).show();
+                        Toast.makeText(VerifyOtpActivity.this, "OTP has been sent to your email.", Toast.LENGTH_LONG).show();
                         hashedUser = result.getHashedUser();
                         clearOtpFields();
                         startTimer();
                         etOtp1.requestFocus();
                     } else {
                         Toast.makeText(VerifyOtpActivity.this, 
-                            result.getMessage() != null ? result.getMessage() : "Failed to resend OTP", 
-                            Toast.LENGTH_LONG).show();
+                            "Failed to generate OTP. Please try again.", Toast.LENGTH_LONG).show();
                     }
                 });
             }
@@ -197,24 +230,23 @@ public class VerifyOtpActivity extends AppCompatActivity {
             @Override
             public void onError(String error) {
                 runOnUiThread(() -> {
-                    Toast.makeText(VerifyOtpActivity.this, error, Toast.LENGTH_LONG).show();
+                    btnVerify.setEnabled(true);
+                    btnVerify.setText("Verify");
+                    Toast.makeText(VerifyOtpActivity.this, 
+                        "Something went wrong. Please try again.", Toast.LENGTH_LONG).show();
                 });
             }
         });
     }
     
     private void handleBack() {
-        if (fromForgotPassword) {
-            Intent intent = new Intent(this, ForgotPasswordActivity.class);
-            startActivity(intent);
-        }
         finish();
     }
     
     private void startTimer() {
         timeLeft = 60;
-        tvResendTimer.setVisibility(View.VISIBLE);
-        tvResendOtp.setVisibility(View.GONE);
+        tvResendOtp.setText("Resend OTP in (60s)");
+        tvResendOtp.setClickable(false);
         
         if (timer != null) {
             timer.cancel();
@@ -224,16 +256,14 @@ public class VerifyOtpActivity extends AppCompatActivity {
             @Override
             public void onTick(long millisUntilFinished) {
                 timeLeft = (int) (millisUntilFinished / 1000);
-                int minutes = timeLeft / 60;
-                int seconds = timeLeft % 60;
-                tvResendTimer.setText(String.format("Resend OTP in %d:%02d", minutes, seconds));
+                tvResendOtp.setText("Resend OTP in (" + timeLeft + "s)");
             }
             
             @Override
             public void onFinish() {
                 timeLeft = 0;
-                tvResendTimer.setVisibility(View.GONE);
-                tvResendOtp.setVisibility(View.VISIBLE);
+                tvResendOtp.setText("Resend OTP");
+                tvResendOtp.setClickable(true);
             }
         }.start();
     }

@@ -50,6 +50,11 @@ public class SignInActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_sign_in);
         
+        // Set status bar text color to black
+        getWindow().getDecorView().setSystemUiVisibility(
+            getWindow().getDecorView().getSystemUiVisibility() | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        );
+        
         // Check if user is already logged in
         authManager = AuthManager.getInstance(this);
         if (authManager.isLoggedIn()) {

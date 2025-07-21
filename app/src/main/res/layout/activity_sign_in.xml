@@ -168,7 +168,7 @@
                     android:layout_weight="1"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginLeft="-10dp">
+                    android:layout_marginLeft="-5dp">
 
                     <CheckBox
                         android:id="@+id/cbRememberMe"

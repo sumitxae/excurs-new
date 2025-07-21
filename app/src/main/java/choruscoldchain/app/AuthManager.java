@@ -330,6 +330,10 @@ public class AuthManager {
         editor.remove(KEY_USER_EMAIL);
         editor.remove(KEY_USER_ROLE);
         editor.putBoolean(KEY_IS_LOGGED_IN, false);
+        // Also clear saved credentials and rememberMe flag
+        editor.remove(KEY_SAVED_EMAIL);
+        editor.remove(KEY_SAVED_PASSWORD);
+        editor.putBoolean(KEY_REMEMBER_ME, false);
         editor.apply();
     }
     

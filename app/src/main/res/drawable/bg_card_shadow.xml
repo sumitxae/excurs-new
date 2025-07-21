@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Shadow layer -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#15000000" />
+            <corners android:radius="16dp" />
+            <padding
+                android:bottom="3dp"
+                android:left="2dp"
+                android:right="2dp"
+                android:top="1dp" />
+        </shape>
+    </item>
+    
+    <!-- Background layer -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/card_background" />
+            <corners android:radius="16dp" />
+        </shape>
+    </item>
+</layer-list> 

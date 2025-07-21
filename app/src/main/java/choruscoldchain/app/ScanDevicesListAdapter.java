@@ -132,13 +132,15 @@ public class ScanDevicesListAdapter extends BaseQuickAdapter<MST03Entity, BaseVi
         if (cardView instanceof androidx.cardview.widget.CardView) {
             androidx.cardview.widget.CardView card = (androidx.cardview.widget.CardView) cardView;
             if (combinationFrame != null && (tempValue > 8.0f || tempValue < 2.0f)) {
+                // Excursion cards - orange shadow
                 card.setCardBackgroundColor(card.getContext().getResources().getColor(R.color.card_background));
                 card.setCardElevation(12f); 
                 card.setOutlineSpotShadowColor(card.getContext().getResources().getColor(R.color.primary));
             } else {
+                // Normal temperature cards - blue shadow
                 card.setCardBackgroundColor(card.getContext().getResources().getColor(R.color.card_background));
-                card.setCardElevation(3f);
-                card.setOutlineSpotShadowColor(card.getContext().getResources().getColor(R.color.border));
+                card.setCardElevation(8f); // Slightly higher elevation for normal cards
+                card.setOutlineSpotShadowColor(card.getContext().getResources().getColor(R.color.normal_temp_shadow));
             }
         }
         

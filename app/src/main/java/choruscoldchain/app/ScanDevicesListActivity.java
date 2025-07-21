@@ -15,6 +15,11 @@ import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ImageView;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import java.io.IOException;
+import java.io.InputStream;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -80,6 +85,7 @@ public class ScanDevicesListActivity extends BaseActivity {
     private DeviceDiscoveryManager deviceManager;
     private DeviceDiscoveryManager.OnDevicesUpdatedListener deviceUpdateListener; 
     private boolean permissionsGranted = false;
+    private ImageView ivChorusLogo;
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -89,6 +95,10 @@ public class ScanDevicesListActivity extends BaseActivity {
         // Remove toolbar setup and menu inflation
         // Set up custom kebab menu
         binding.btnKebabMenu.setOnClickListener(v -> showCustomMenu(v));
+
+        // Initialize chorus logo
+        ivChorusLogo = findViewById(R.id.iv_chorus_logo);
+        loadChorusLogo();
 
         View decor = getWindow().getDecorView();
         decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
@@ -1681,6 +1691,23 @@ public class ScanDevicesListActivity extends BaseActivity {
         } catch (Exception e) {
             Log.e("ScanDebug", "Error sharing log file: " + e.getMessage());
             Toast.makeText(this, "Error sharing log file", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void loadChorusLogo() {
+        try {
+            // Try to load from assets first
+            InputStream inputStream = getAssets().open("images/chorus.png");
+            Bitmap bitmap = BitmapFactory.decodeStream(inputStream);
+            ivChorusLogo.setImageBitmap(bitmap);
+            inputStream.close();
+        } catch (IOException e) {
+            try {
+                // Fallback to drawable resource
+                ivChorusLogo.setImageResource(R.drawable.ic_chorus_logo);
+            } catch (Exception ex) {
+                Log.e("ScanDevicesListActivity", "Error loading chorus logo", ex);
+            }
         }
     }
 }
