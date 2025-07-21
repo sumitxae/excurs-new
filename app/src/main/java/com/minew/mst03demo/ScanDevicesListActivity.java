@@ -103,7 +103,7 @@ public class ScanDevicesListActivity extends BaseActivity {
             @Override
             public void onDevicesUpdated(List<MST03Entity> devices) {
                 runOnUiThread(() -> {
-                    Log.d("ScanDebug", "Received " + devices.size() + " devices from background service");
+                    
                     updateAllDiscoveredDevices(devices);
                     
                     // Update UI based on current search mode
@@ -233,7 +233,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         if (requestCode == QR_SCAN_REQUEST_CODE && resultCode == RESULT_OK && data != null) {
             String scanResult = data.getStringExtra(QRScannerActivity.EXTRA_SCAN_RESULT);
             if (scanResult != null && !scanResult.trim().isEmpty()) {
-                Log.d("ScanDebug", "QR Code scanned: " + scanResult);
+                
                 
                 
                 processQRScanResult(scanResult);
@@ -301,7 +301,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         try {
             
             if (searchText == null || searchText.trim().isEmpty()) {
-                Log.d("ScanDebug", "Search text is empty, returning early");
+                
                 return;
             }
             
@@ -346,7 +346,7 @@ public class ScanDevicesListActivity extends BaseActivity {
                 }
                 Toast.makeText(this, resultText, Toast.LENGTH_SHORT).show();
                 
-                Log.d("ScanDebug", "Search for '" + searchText + "' returned " + filteredDevices.size() + " devices");
+                
             } else {
                 Log.e("ScanDebug", "Adapter is null, cannot update search results");
             }
@@ -362,7 +362,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         try {
             
             if (searchText == null || searchText.trim().isEmpty()) {
-                Log.d("ScanDebug", "QR Search text is empty, returning early");
+                
                 return;
             }
             
@@ -407,7 +407,7 @@ public class ScanDevicesListActivity extends BaseActivity {
                 }
                 Toast.makeText(this, resultText, Toast.LENGTH_SHORT).show();
                 
-                Log.d("ScanDebug", "QR Search for '" + searchText + "' returned " + filteredDevices.size() + " devices");
+                
             } else {
                 Log.e("ScanDebug", "Adapter is null, cannot update search results");
             }
@@ -442,9 +442,9 @@ public class ScanDevicesListActivity extends BaseActivity {
             
             if (mDevicesListAdapter != null && allDiscoveredDevices != null) {
                 mDevicesListAdapter.setList(allDiscoveredDevices);
-                Log.d("ScanDebug", "Search cleared, showing all " + allDiscoveredDevices.size() + " devices");
+                
             } else {
-                Log.d("ScanDebug", "Search cleared, but adapter or device list is null");
+                
             }
             
         } catch (Exception e) {
@@ -466,7 +466,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         super.onStop();
         removeBleManagerListener();
         
-        Log.d("ScanDebug", "App going to background, keeping scan active");
+        
     }
     
     @Override
@@ -493,7 +493,7 @@ public class ScanDevicesListActivity extends BaseActivity {
             httpLogger.shutdown();
         }
         
-        Log.d("ScanDebug", "Activity destroyed, background service continues");
+        
     }
 
     private void initRefresh(){
@@ -508,72 +508,72 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
 
     private void initRecyclerView(){
-        Log.d("ScanDebug", "=== INIT RECYCLER VIEW STARTED ===");
+        
         binding.recyclerView.setLayoutManager(new LinearLayoutManager(binding.recyclerView.getContext()));
         mDevicesListAdapter = new ScanDevicesListAdapter(R.layout.item_scan_device,null);
 
         binding.recyclerView.addItemDecoration(new DividerItemDecoration(this, LinearLayout.VERTICAL));
         
-        Log.d("ScanDebug", "=== SETTING ADAPTER CLICK LISTENER ===");
+        
         mDevicesListAdapter.setOnConnectClickListener(new ScanDevicesListAdapter.OnConnectClickListener() {
             @Override
             public void onConnectClick(MST03Entity device) {
-                Log.d("ScanDebug", "=== ADAPTER CLICK LISTENER TRIGGERED ===");
-                Log.d("ScanDebug", "Device: " + device.getMacAddress());
-                Log.d("ScanDebug", "About to call connectToDeviceAndNavigate");
+                
+                
+                
                 // Connect to the device and navigate to details screen
                 connectToDeviceAndNavigate(device);
-                Log.d("ScanDebug", "connectToDeviceAndNavigate called successfully");
-                Log.d("ScanDebug", "=== ADAPTER CLICK LISTENER COMPLETED ===");
+                
+                
             }
         });
-        Log.d("ScanDebug", "Adapter click listener set successfully");
+        
         
         // Test the adapter listener
-        Log.d("ScanDebug", "Testing adapter click listener...");
+        
         if (mDevicesListAdapter != null) {
-            Log.d("ScanDebug", "Adapter is not null");
+            
             // We can't test the listener directly, but we can verify it's set
         } else {
             Log.e("ScanDebug", "Adapter is null!");
         }
 
         binding.recyclerView.setAdapter(mDevicesListAdapter);
-        Log.d("ScanDebug", "=== INIT RECYCLER VIEW COMPLETED ===");
+        
     }
     
 
     
     private void connectToDeviceAndNavigate(MST03Entity device) {
-        Log.d("ScanDebug", "=== CONNECTION ATTEMPT STARTED ===");
-        Log.d("ScanDebug", "Device: " + device.getMacAddress());
-        Log.d("ScanDebug", "isConnecting: " + isConnecting);
+        
+        
+        
         
         if (isConnecting) {
-            Log.d("ScanDebug", "Already connecting, ignoring click");
+            
             Toast.makeText(this, "Already connecting to a device", Toast.LENGTH_SHORT).show();
             return;
         }
         
-        Log.d("ScanDebug", "Setting isConnecting to true");
+        
         isConnecting = true;
         mst03Entity = device;
         
         // Disable all connect buttons during connection
-        Log.d("ScanDebug", "Disabling connect buttons");
+        
         mDevicesListAdapter.setConnectButtonsEnabled(false);
         
         // Show connection dialog
-        Log.d("ScanDebug", "Showing connection dialog");
+        
         WaitDialog.show("Connecting to device...");
         
         // Set connection timeout
-        Log.d("ScanDebug", "Setting connection timeout");
+        
         connectionTimeoutHandler.postDelayed(new Runnable() {
             @Override
             public void run() {
                 if (isConnecting) {
-                    Log.d("ScanDebug", "Connection timeout - navigating to device details");
+                    
                     isConnecting = false;
                     mDevicesListAdapter.setConnectButtonsEnabled(true);
                     WaitDialog.dismiss();
@@ -589,14 +589,14 @@ public class ScanDevicesListActivity extends BaseActivity {
                         if (deviceInfo != null) {
                             batteryLevel = deviceInfo.getBattery();
                             firmwareVersion = deviceInfo.getFirmwareVersion();
-                            Log.d("ScanDebug", "Timeout: Extracted device info - Battery: " + batteryLevel + "%, Firmware: " + firmwareVersion);
+                            
                         }
                         
                         // Get current temperature from combination frame
                         CombinationFrame comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.COMBINATION_FRAME);
                         if (comboFrame != null) {
                             currentTemperature = comboFrame.getTemperature();
-                            Log.d("ScanDebug", "Timeout: Extracted current temperature: " + currentTemperature + "°C");
+                            
                         }
                     }
                     
@@ -612,23 +612,30 @@ public class ScanDevicesListActivity extends BaseActivity {
             @Override
             public void run() {
                 if (isConnecting) {
-                    Log.d("ScanDebug", "Fallback navigation triggered - connection taking too long");
+                    
                     // Don't dismiss dialog or change state, just log for debugging
                 }
             }
         }, 3000); // 3 second fallback check
         
         // Ensure BLE manager is ready and listener is set
-        Log.d("ScanDebug", "Ensuring BLE manager is ready");
+        
         ensureBleManagerReady();
         
+        // Stop background scan service before connecting
+        if (isBackgroundServiceRunning()) {
+            stopService(new Intent(this, BackgroundScanService.class));
+        }
+        // Stop any direct scans
+        mBleManager.stopScan(this);
+        
         // Connect to the device
-        Log.d("ScanDebug", "Attempting to connect to device: " + device.getMacAddress());
+        
         try {
             if (mBleManager != null) {
-                Log.d("ScanDebug", "BLE manager is not null, calling connect");
+                
                 mBleManager.connect(this, device);
-                Log.d("ScanDebug", "Connection request sent successfully");
+                
             } else {
                 Log.e("ScanDebug", "BLE manager is null, cannot connect");
                 throw new Exception("BLE manager not initialized");
@@ -651,14 +658,14 @@ public class ScanDevicesListActivity extends BaseActivity {
                 if (deviceInfo != null) {
                     batteryLevel = deviceInfo.getBattery();
                     firmwareVersion = deviceInfo.getFirmwareVersion();
-                    Log.d("ScanDebug", "Error: Extracted device info - Battery: " + batteryLevel + "%, Firmware: " + firmwareVersion);
+                    
                 }
                 
                 // Get current temperature from combination frame
                 CombinationFrame comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.COMBINATION_FRAME);
                 if (comboFrame != null) {
                     currentTemperature = comboFrame.getTemperature();
-                    Log.d("ScanDebug", "Error: Extracted current temperature: " + currentTemperature + "°C");
+                    
                 }
             }
             
@@ -667,7 +674,7 @@ public class ScanDevicesListActivity extends BaseActivity {
             startActivity(intent);
         }
         
-        Log.d("ScanDebug", "=== CONNECTION ATTEMPT COMPLETED ===");
+        
     }
 
     private void initAnimator(){
@@ -690,11 +697,11 @@ public class ScanDevicesListActivity extends BaseActivity {
                 Toast.makeText(this, "Failed to initialize Bluetooth manager", Toast.LENGTH_SHORT).show();
                 return;
             }
-            Log.d("ScanDebug", "BLE manager initialized: " + (mBleManager != null));
+            
             
             // Set the connection state listener immediately
             setBleManagerListener();
-            Log.d("ScanDebug", "BLE manager listener set successfully");
+            
         } catch (Exception e) {
             Log.e("ScanDebug", "Error initializing BLE manager: " + e.getMessage());
             Toast.makeText(this, "Error initializing Bluetooth: " + e.getMessage(), Toast.LENGTH_SHORT).show();
@@ -703,18 +710,18 @@ public class ScanDevicesListActivity extends BaseActivity {
     
     private void ensureBleManagerReady() {
         if (mBleManager == null) {
-            Log.d("ScanDebug", "Reinitializing BLE manager...");
+            
             initBleManager();
         }
         // Always set the listener to ensure it's active
         setBleManagerListener();
-        Log.d("ScanDebug", "BLE manager ready check completed");
+        
     }
     
     private void setBleManagerListener(){
         if (mBleManager != null) {
             mBleManager.setOnConnStateListener(mConnStateListener);
-            Log.d("ScanDebug", "BLE manager listener set");
+            
         } else {
             Log.e("ScanDebug", "Cannot set BLE manager listener - manager is null");
         }
@@ -732,7 +739,7 @@ public class ScanDevicesListActivity extends BaseActivity {
             } else {
                 startService(serviceIntent);
             }
-            Log.d("ScanDebug", "Background scan service started successfully");
+            
         } catch (Exception e) {
             Log.e("ScanDebug", "Failed to start background service: " + e.getMessage());
             
@@ -742,10 +749,10 @@ public class ScanDevicesListActivity extends BaseActivity {
     private OnConnStateListener mConnStateListener = new OnConnStateListener() {
         @Override
         public void onUpdateConnState(String s, BleConnectionState mSensorConnectionState) {
-            Log.d("ScanDebug", "Connection state changed: " + mSensorConnectionState + " for device: " + s);
+            
             
             if (mst03Entity != null && s.equals(mst03Entity.getMacAddress())) {
-                Log.d("ScanDebug", "Connection event: " + mSensorConnectionState + " for " + mst03Entity.getMacAddress());
+                
             }
             
             switch (mSensorConnectionState) {
@@ -759,14 +766,14 @@ public class ScanDevicesListActivity extends BaseActivity {
                     
                     // Set the secret key immediately when connected (required for authentication)
                     if (mst03Entity != null && s.equals(mst03Entity.getMacAddress())) {
-                        Log.d("ScanDebug", "Setting authentication key for device: " + s);
+                        
                         setKey(s);
                     }
                     break;
                 case AuthenticateSuccess:
                     Log.d("TAG","AuthenticateSuccess");
                     updateConnectionStatus("Authenticated Successfully");
-                    Log.d("ScanDebug", "Authentication successful for device: " + s);
+                    
                     break;
                 case AuthenticateFail:
                     Log.d("TAG","AuthenticateFail");
@@ -811,14 +818,17 @@ public class ScanDevicesListActivity extends BaseActivity {
                             batteryLevel = deviceInfo.getBattery();
                             firmwareVersion = deviceInfo.getFirmwareVersion();
                             currentDeviceStaticInfo = deviceInfo;
-                            Log.d("ScanDebug", "Extracted device info - Battery: " + batteryLevel + "%, Firmware: " + firmwareVersion);
+                            Log.d("BeaconData", "[ConnectComplete] MAC: " + mst03Entity.getMacAddress() + ", DeviceInfo: " + deviceInfo.toString());
+                        } else {
+                            Log.d("BeaconData", "[ConnectComplete] MAC: " + mst03Entity.getMacAddress() + ", DeviceInfo: null");
                         }
-                        
                         // Get current temperature from combination frame
                         CombinationFrame comboFrame = (CombinationFrame) mst03Entity.getMinewFrame(FrameType.COMBINATION_FRAME);
                         if (comboFrame != null) {
                             currentTemperature = comboFrame.getTemperature();
-                            Log.d("ScanDebug", "Extracted current temperature: " + currentTemperature + "°C");
+                            Log.d("BeaconData", "[ConnectComplete] MAC: " + mst03Entity.getMacAddress() + ", CombinationFrame: " + comboFrame.toString());
+                        } else {
+                            Log.d("BeaconData", "[ConnectComplete] MAC: " + mst03Entity.getMacAddress() + ", CombinationFrame: null");
                         }
                     }
                     
@@ -830,21 +840,23 @@ public class ScanDevicesListActivity extends BaseActivity {
                     startActivity(intent);
                     break;
                 case Disconnect:
-                    Log.d("TAG","Disconnect");
-                    
+                    Log.d("ScanDebug", "Device disconnected, restarting scan service");
                     connectionTimeoutHandler.removeCallbacksAndMessages(null);
                     updateConnectionStatus("Disconnected");
-                    
                     isConnecting = false;
                     mDevicesListAdapter.setConnectButtonsEnabled(true);
-                    
+
                     if (mst03Entity != null && s.equals(mst03Entity.getMacAddress())) {
                         hideDeviceDetailsCard();
                     }
+
+                    // Restart background scan service after disconnect
+                    startBackgroundScanService();
+                    Log.d("ScanDebug", "Called startBackgroundScanService() after disconnect");
                     break;
 
                 default:
-                    Log.d("ScanDebug", "Unhandled connection state: " + mSensorConnectionState);
+                    
                     break;
             }
         }
@@ -893,18 +905,18 @@ public class ScanDevicesListActivity extends BaseActivity {
 
 
     private void checkoutBluetooth(){
-        Log.d("ScanDebug", "Checking Bluetooth status...");
+        
         switch (BLETool.checkBluetooth(this)){
             case BLE_NOT_SUPPORT:
-                Log.d("ScanDebug", "BLE not supported on this device");
+                
                 Toast.makeText(this, "Not Support BLE", Toast.LENGTH_SHORT).show();
                 break;
             case BLUETOOTH_ON:
-                Log.d("ScanDebug", "Bluetooth is ON, starting scan...");
+                
                 startScan();
                 break;
             case BLUETOOTH_OFF:
-                Log.d("ScanDebug", "Bluetooth is OFF, requesting to enable...");
+                
                 Intent enableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
                 startActivityForResult(enableIntent, 4);
                 break;
@@ -915,14 +927,14 @@ public class ScanDevicesListActivity extends BaseActivity {
 
 
     private void startScan(){
-        Log.d("ScanDebug", "Foreground scan requested - but using background service for device discovery");
+        
         
         // The background service is handling all scanning
         // This method is kept for compatibility but doesn't start its own scan
         if (isBackgroundServiceRunning()) {
-            Log.d("ScanDebug", "Background service is running and handling device discovery");
+            
         } else {
-            Log.d("ScanDebug", "Background service not running, starting it...");
+            
             startBackgroundScanService();
         }
         
@@ -960,11 +972,11 @@ public class ScanDevicesListActivity extends BaseActivity {
             }
         });
         
-        Log.d("ScanDebug", "Updated all discovered devices list. Total devices: " + allDiscoveredDevices.size());
+        
     }
 
     private void stopScan(){
-        Log.d("ScanDebug", "Foreground stop scan requested - but background service continues");
+        
         // Only stop the animation, background service continues scanning
         mObjectAnimator.cancel();
     }
@@ -1002,12 +1014,13 @@ public class ScanDevicesListActivity extends BaseActivity {
         // setKey(mst03Entity.getMacAddress()); // Moved to Connected state
         
         // Fetch historical data for local display (no backend upload)
-        Log.d("ScanDebug", "Fetching historical data for local display");
+        
         fetchHistoricalDataForLocalDisplay();
     }
     
     private void fetchHistoricalDataForLocalDisplay() {
-        Log.d("ScanDebug", "Fetching historical data for local display - device: " + mst03Entity.getMacAddress());
+        Log.d("BeaconRawData", "fetchHistoricalDataForLocalDisplay called");
+        
         
         // Set processing as not complete initially
         isDataProcessingComplete = false;
@@ -1017,37 +1030,38 @@ public class ScanDevicesListActivity extends BaseActivity {
         long startTime = systemTime - (24 * 60 * 60); // Last 24 hours in seconds
         long endTime = systemTime;
         
-        Log.d("ScanDebug", "Local query parameters:");
-        Log.d("ScanDebug", "  - systemTime: " + systemTime + " (" + new java.util.Date(systemTime * 1000) + ")");
-        Log.d("ScanDebug", "  - startTime: " + startTime + " (" + new java.util.Date(startTime * 1000) + ")");
-        Log.d("ScanDebug", "  - endTime: " + endTime + " (" + new java.util.Date(endTime * 1000) + ")");
-        Log.d("ScanDebug", "  - Time range: " + (endTime - startTime) + " seconds (" + (endTime - startTime) / 3600 + " hours)");
+        
+        
+        
+        
+        
         
         try {
             // Try with rules=1 for time-based query as per SDK documentation
-            Log.d("ScanDebug", "Calling queryHistoryData with rules=1 (time-based query)");
+            
             mBleManager.queryHistoryData(mst03Entity.getMacAddress(), 1, startTime, endTime, systemTime, 
                 new OnQueryResultListener<HistoryHtData>() {
                     @Override
                     public void OnQueryResult(boolean success, HistoryHtData historyHtData) {
-                        Log.d("ScanDebug", "Local OnQueryResult called - success: " + success + ", historyHtData: " + (historyHtData != null));
+                        Log.d("BeaconRawData", "OnQueryResult called, success=" + success + ", historyHtData=" + historyHtData);
+                        
                         if (success && historyHtData != null) {
                             List<HtData> allData = historyHtData.getHistoryDataList();
-                            Log.d("ScanDebug", "Local historical data received: " + allData.size() + " records");
+                            
                             
                             if (allData.isEmpty()) {
-                                Log.d("ScanDebug", "Historical data list is empty - no data in the specified time range");
+                                
                                 // Try fallback with rules=0 (all data)
                                 tryFallbackQuery(systemTime);
                             } else {
-                                Log.d("ScanDebug", "First record: " + allData.get(0).getTemperature() + "°C at " + new java.util.Date(allData.get(0).getTimestamps() * 1000));
-                                Log.d("ScanDebug", "Last record: " + allData.get(allData.size()-1).getTemperature() + "°C at " + new java.util.Date(allData.get(allData.size()-1).getTimestamps() * 1000));
+                                
+                                
                                 
                                 // Process data for local display only
                                 processHistoricalDataForLocalDisplay(allData);
                             }
                         } else {
-                            Log.d("ScanDebug", "Local failed to get historical data - success: " + success + ", historyHtData null: " + (historyHtData == null));
+                            
                             
                             // Try fallback with rules=0 (all data)
                             tryFallbackQuery(systemTime);
@@ -1064,27 +1078,28 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
     
     private void tryFallbackQuery(long systemTime) {
-        Log.d("ScanDebug", "Trying fallback with rules=0 (all data)");
+        Log.d("BeaconRawData", "tryFallbackQuery called");
         try {
             mBleManager.queryHistoryData(mst03Entity.getMacAddress(), 0, 0, 0, systemTime, 
                 new OnQueryResultListener<HistoryHtData>() {
                     @Override
                     public void OnQueryResult(boolean fallbackSuccess, HistoryHtData fallbackHistoryHtData) {
-                        Log.d("ScanDebug", "Fallback OnQueryResult - success: " + fallbackSuccess + ", data: " + (fallbackHistoryHtData != null));
+                        Log.d("BeaconRawData", "Fallback OnQueryResult called, success=" + fallbackSuccess + ", historyHtData=" + fallbackHistoryHtData);
+                        
                         if (fallbackSuccess && fallbackHistoryHtData != null) {
                             List<HtData> fallbackData = fallbackHistoryHtData.getHistoryDataList();
-                            Log.d("ScanDebug", "Fallback historical data received: " + fallbackData.size() + " records");
+                            
                             
                             if (fallbackData.isEmpty()) {
-                                Log.d("ScanDebug", "Both time-based and all-data queries returned empty data");
+                                
                                 handleNoDataAvailable();
                             } else {
-                                Log.d("ScanDebug", "Fallback data - First record: " + fallbackData.get(0).getTemperature() + "°C at " + new java.util.Date(fallbackData.get(0).getTimestamps() * 1000));
-                                Log.d("ScanDebug", "Fallback data - Last record: " + fallbackData.get(fallbackData.size()-1).getTemperature() + "°C at " + new java.util.Date(fallbackData.get(fallbackData.size()-1).getTimestamps() * 1000));
+                                
+                                
                                 processHistoricalDataForLocalDisplay(fallbackData);
                             }
                         } else {
-                            Log.d("ScanDebug", "Both time-based and all-data queries failed");
+                            
                             handleNoDataAvailable();
                         }
                     }
@@ -1097,26 +1112,31 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
     
     private void handleNoDataAvailable() {
-        Log.d("ScanDebug", "No historical data available from device");
+        
         // Set processing complete even if no data
         isDataProcessingComplete = true;
-        Log.d("ScanDebug", "Data processing marked as complete (no data available)");
+        
         
         // Disconnect from device even if no data was received
         if (mst03Entity != null && mBleManager != null) {
-            Log.d("ScanDebug", "Disconnecting from device after failed data fetch: " + mst03Entity.getMacAddress());
+            
             mBleManager.disConnect(mst03Entity.getMacAddress());
             
             // Reset connection state
             isConnecting = false;
             mDevicesListAdapter.setConnectButtonsEnabled(true);
             
-            Log.d("ScanDebug", "Device disconnected after failed data fetch");
+            
         }
     }
     
     private void processHistoricalDataForLocalDisplay(List<HtData> htDataList) {
-        Log.d("ScanDebug", "Processing " + htDataList.size() + " historical records for local display");
+        
+        // Log each piece of beacon data (raw data)
+        for (int i = 0; i < htDataList.size(); i++) {
+            HtData htData = htDataList.get(i);
+            Log.d("BeaconRawData", "Raw data: " + htData.toString());
+        }
         
         // Clear previous data
         processedHistoricalData.clear();
@@ -1130,26 +1150,26 @@ public class ScanDevicesListActivity extends BaseActivity {
         
         // Mark processing as complete
         isDataProcessingComplete = true;
-        Log.d("ScanDebug", "Local data processing completed - " + processedHistoricalData.size() + " records, " + processedExcursionData.size() + " excursions");
+        
         
         // Disconnect from device immediately after data processing is complete
         if (mst03Entity != null && mBleManager != null) {
-            Log.d("ScanDebug", "Disconnecting from device after data processing: " + mst03Entity.getMacAddress());
+            
             mBleManager.disConnect(mst03Entity.getMacAddress());
             
             // Reset connection state but keep the device entity for display purposes
             isConnecting = false;
             mDevicesListAdapter.setConnectButtonsEnabled(true);
             
-            Log.d("ScanDebug", "Device disconnected after data fetch - user can now connect to other devices");
+            
         }
     }
     
     private void analyzeExcursionsForLocalDisplay(List<HtData> htDataList) {
-        Log.d("ScanDebug", "Analyzing excursions for local display");
+        
         
         if (htDataList.isEmpty()) {
-            Log.d("ScanDebug", "No data to analyze for excursions");
+            
             return;
         }
         
@@ -1164,17 +1184,17 @@ public class ScanDevicesListActivity extends BaseActivity {
                 // Low temperature excursion
                 ExcursionData excursion = new ExcursionData(temperature, timestamp, "LOW", mst03Entity.getMacAddress());
                 excursions.add(excursion);
-                Log.d("ScanDebug", "Low excursion detected: " + temperature + "°C at " + new java.util.Date(timestamp * 1000));
+                
             } else if (temperature > 8.0f) {
                 // High temperature excursion
                 ExcursionData excursion = new ExcursionData(temperature, timestamp, "HIGH", mst03Entity.getMacAddress());
                 excursions.add(excursion);
-                Log.d("ScanDebug", "High excursion detected: " + temperature + "°C at " + new java.util.Date(timestamp * 1000));
+                
             }
         }
         
         processedExcursionData.addAll(excursions);
-        Log.d("ScanDebug", "Local excursion analysis completed - found " + excursions.size() + " excursions");
+        
     }
     
     // Static methods to access processed data
@@ -1224,7 +1244,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         
         if (mst03Entity != null && mBleManager != null) {
             mBleManager.disConnect(mst03Entity.getMacAddress());
-            Log.d("ScanDebug", "Disconnected from device: " + mst03Entity.getMacAddress());
+            
         }
         
         mst03Entity = null;
@@ -1263,14 +1283,14 @@ public class ScanDevicesListActivity extends BaseActivity {
         
         binding.btnCloseDetails.setOnClickListener(v -> hideDeviceDetailsCard());
         
-        Log.d("ScanDebug", "Device info card shown immediately after connection");
+        
     }
     
     private void startAsyncDataUpload() {
         
         new Thread(() -> {
             try {
-                Log.d("ScanDebug", "Starting async data upload for device: " + mst03Entity.getMacAddress());
+                
                 
                 
                 fetchHistoricalDataAsync();
@@ -1288,33 +1308,33 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
     
     private void fetchHistoricalData() {
-        Log.d("ScanDebug", "Fetching historical data for device: " + mst03Entity.getMacAddress());
+        
         
         long systemTime = System.currentTimeMillis() / 1000;
         
         long startTime = (systemTime - 3600 * 24) / 1000; 
         long endTime = systemTime;
         
-        Log.d("ScanDebug", "Query parameters - startTime: " + startTime + ", endTime: " + endTime + ", systemTime: " + systemTime);
+        
         
         mBleManager.queryHistoryData(mst03Entity.getMacAddress(), 1, startTime, endTime, systemTime, 
             new OnQueryResultListener<HistoryHtData>() {
                 @Override
                 public void OnQueryResult(boolean success, HistoryHtData historyHtData) {
-                    Log.d("ScanDebug", "OnQueryResult called - success: " + success + ", historyHtData: " + (historyHtData != null));
+                    
                     if (success && historyHtData != null) {
                         List<HtData> allData = historyHtData.getHistoryDataList();
-                        Log.d("ScanDebug", "Historical data received: " + allData.size() + " records - sending FULL data in chunks");
+                        
                         
                         
                         analyzeExcursions(allData);
                     } else {
-                        Log.d("ScanDebug", "Failed to get historical data - success: " + success + ", historyHtData null: " + (historyHtData == null));
+                        
                         updateConnectionStatus("Failed to get data");
                         
                         
                         if (mst03Entity != null) {
-                            Log.d("ScanDebug", "Sending device info without historical data");
+                            
                             sendCompleteDeviceData(new ArrayList<>());
                             
                             updateHistoricalDataUI(0, 0, -1);
@@ -1325,28 +1345,28 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
     
     private void fetchHistoricalDataAsync() {
-        Log.d("ScanDebug", "Fetching historical data asynchronously for device: " + mst03Entity.getMacAddress());
+        
         
         long systemTime = System.currentTimeMillis() / 1000;
         
         long startTime = (systemTime - 3600 * 24) / 1000; 
         long endTime = systemTime;
         
-        Log.d("ScanDebug", "Async query parameters - startTime: " + startTime + ", endTime: " + endTime + ", systemTime: " + systemTime);
+        
         
         mBleManager.queryHistoryData(mst03Entity.getMacAddress(), 1, startTime, endTime, systemTime, 
             new OnQueryResultListener<HistoryHtData>() {
                 @Override
                 public void OnQueryResult(boolean success, HistoryHtData historyHtData) {
-                    Log.d("ScanDebug", "Async OnQueryResult called - success: " + success + ", historyHtData: " + (historyHtData != null));
+                    
                     if (success && historyHtData != null) {
                         List<HtData> allData = historyHtData.getHistoryDataList();
-                        Log.d("ScanDebug", "Async historical data received: " + allData.size() + " records - sending FULL data in chunks");
+                        
                         
                         
                         analyzeExcursionsAsync(allData);
                     } else {
-                        Log.d("ScanDebug", "Async failed to get historical data - success: " + success + ", historyHtData null: " + (historyHtData == null));
+                        
                         
                         
                         runOnUiThread(() -> {
@@ -1355,7 +1375,7 @@ public class ScanDevicesListActivity extends BaseActivity {
                         
                         
                         if (mst03Entity != null) {
-                            Log.d("ScanDebug", "Sending device info without historical data");
+                            
                             sendCompleteDeviceDataAsync(new ArrayList<>());
                         }
                     }
@@ -1381,7 +1401,7 @@ public class ScanDevicesListActivity extends BaseActivity {
             
             if (wasInNormalRange && !isInNormalRange && firstExcursionStartTime == -1) {
                 firstExcursionStartTime = timestamp;
-                Log.d("ScanDebug", "First excursion started at: " + new java.util.Date(timestamp));
+                
             }
             
             
@@ -1424,7 +1444,7 @@ public class ScanDevicesListActivity extends BaseActivity {
             
             if (wasInNormalRange && !isInNormalRange && firstExcursionStartTime == -1) {
                 firstExcursionStartTime = timestamp;
-                Log.d("ScanDebug", "Async - First excursion started at: " + new java.util.Date(timestamp));
+                
             }
             
             
@@ -1449,13 +1469,13 @@ public class ScanDevicesListActivity extends BaseActivity {
         processedExcursionData.addAll(excursionDataList);
         isDataProcessingComplete = true;
         
-        Log.d("ScanDebug", "Data processing complete - Historical: " + htDataList.size() + ", Excursions: " + excursionDataList.size());
+        
         
         sendCompleteDeviceDataAsync(htDataList);
     }
     
     private void sendCompleteDeviceData(List<HtData> htDataList) {
-        Log.d("ScanDebug", "sendCompleteDeviceData called with " + htDataList.size() + " historical records");
+        
         
         if (mst03Entity == null) {
             Log.e("ScanDebug", "mst03Entity is null, cannot send device data");
@@ -1470,34 +1490,34 @@ public class ScanDevicesListActivity extends BaseActivity {
         int batteryLevel = 0;
         int rssi = mst03Entity.getRssi();
         
-        Log.d("ScanDebug", "Device info - MAC: " + deviceMac + ", Name: " + deviceName + ", RSSI: " + rssi);
+        
         
         
         if (mst03Entity.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME) != null) {
             com.minew.ble.mst03.frames.CombinationFrame comboFrame = 
                 (com.minew.ble.mst03.frames.CombinationFrame) mst03Entity.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
             currentTemperature = comboFrame.getTemperature();
-            Log.d("ScanDebug", "Current temperature from combo frame: " + currentTemperature);
+            
         } else {
-            Log.d("ScanDebug", "No combination frame available for temperature");
+            
         }
         
         
         if (currentDeviceStaticInfo != null) {
             batteryLevel = currentDeviceStaticInfo.getBattery();
             firmwareVersion = currentDeviceStaticInfo.getFirmwareVersion();
-            Log.d("ScanDebug", "Device static info - Battery: " + batteryLevel + "%, Firmware: " + firmwareVersion);
+            
         } else {
-            Log.d("ScanDebug", "No device static info available");
+            
         }
         
-        Log.d("ScanDebug", "About to send complete device data to HTTP server");
+        
         
         
         httpLogger.logCompleteDeviceData(deviceMac, deviceName, currentTemperature, firmwareVersion, 
                                         batteryLevel, rssi, htDataList, excursionDataList);
         
-        Log.d("ScanDebug", "Complete device data sent, scheduling disconnect and scan resume");
+        
         
         
         if (excursionDataList.size() > 0) {
@@ -1506,14 +1526,14 @@ public class ScanDevicesListActivity extends BaseActivity {
         
         
         new android.os.Handler().postDelayed(() -> {
-            Log.d("ScanDebug", "Disconnecting and resuming scan after data collection");
+            
             hideDeviceDetailsCard();
             startScan();
         }, 7000); 
     }
     
     private void sendCompleteDeviceDataAsync(List<HtData> htDataList) {
-        Log.d("ScanDebug", "sendCompleteDeviceDataAsync called with " + htDataList.size() + " historical records");
+        
         
         if (mst03Entity == null) {
             Log.e("ScanDebug", "mst03Entity is null, cannot send device data");
@@ -1528,44 +1548,44 @@ public class ScanDevicesListActivity extends BaseActivity {
         int batteryLevel = 0;
         int rssi = mst03Entity.getRssi();
         
-        Log.d("ScanDebug", "Async device info - MAC: " + deviceMac + ", Name: " + deviceName + ", RSSI: " + rssi);
+        
         
         
         if (mst03Entity.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME) != null) {
             com.minew.ble.mst03.frames.CombinationFrame comboFrame = 
                 (com.minew.ble.mst03.frames.CombinationFrame) mst03Entity.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
             currentTemperature = comboFrame.getTemperature();
-            Log.d("ScanDebug", "Async temperature from CombinationFrame: " + currentTemperature + "°C");
+            
         } else {
-            Log.d("ScanDebug", "Async no combination frame available for temperature");
+            
         }
         
         // Validate temperature before HTTP logging
         boolean hasValidTemperature = (currentTemperature != 0.0f && !Float.isNaN(currentTemperature));
         if (!hasValidTemperature) {
             Log.w("ScanDebug", "Invalid temperature detected: " + currentTemperature + "°C - skipping HTTP logging");
-            Log.d("ScanDebug", "Device data processing complete without HTTP logging due to invalid temperature");
+            
             return;
         }
         
-        Log.d("ScanDebug", "Valid temperature confirmed: " + currentTemperature + "°C - proceeding with HTTP logging");
+        
         
         
         if (currentDeviceStaticInfo != null) {
             batteryLevel = currentDeviceStaticInfo.getBattery();
             firmwareVersion = currentDeviceStaticInfo.getFirmwareVersion();
-            Log.d("ScanDebug", "Async device static info - Battery: " + batteryLevel + "%, Firmware: " + firmwareVersion);
+            
         } else {
-            Log.d("ScanDebug", "Async no device static info available");
+            
         }
         
-        Log.d("ScanDebug", "About to send complete device data to HTTP server asynchronously");
+        
         
         
         httpLogger.logCompleteDeviceData(deviceMac, deviceName, currentTemperature, firmwareVersion, 
                                         batteryLevel, rssi, htDataList, excursionDataList);
         
-        Log.d("ScanDebug", "Async complete device data sent");
+        
         
         
         if (excursionDataList.size() > 0) {
@@ -1603,7 +1623,7 @@ public class ScanDevicesListActivity extends BaseActivity {
     private void viewLogFile() {
         String logPath = excursionLogger.getLogFilePath();
         if (logPath != null) {
-            Log.d("ScanDebug", "Log file path: " + logPath);
+            
             
             showLogFileContent(logPath);
         } else {

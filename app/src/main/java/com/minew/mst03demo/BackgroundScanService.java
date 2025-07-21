@@ -200,75 +200,62 @@ public class BackgroundScanService extends Service {
                     if (list.size() > 0) {
                         // Log detailed data for each device
                         for (MST03Entity mst03Entity : list) {
-                            Log.d("ScanDebug", "=== BACKGROUND SCAN DEVICE DISCOVERED ===");
-                            Log.d("ScanDebug", "Device MAC: " + mst03Entity.getMacAddress());
-                            Log.d("ScanDebug", "Device Name: " + mst03Entity.getName());
-                            Log.d("ScanDebug", "Device RSSI: " + mst03Entity.getRssi());
+                            
+                            
+                            
+                            
                             
                             // Specifically check for battery, temperature, and firmware
-                            Log.d("ScanDebug", "--- CRITICAL SCAN DATA ---");
+                            
                             
                             // Check DeviceStaticInfoFrame for battery and firmware
                             com.minew.ble.mst03.frames.DeviceStaticInfoFrame deviceInfo = 
                                 (com.minew.ble.mst03.frames.DeviceStaticInfoFrame) mst03Entity.getMinewFrame(com.minew.ble.v3.enums.FrameType.DEVICE_INFORMATION_FRAME);
                             if (deviceInfo != null) {
-                                Log.d("ScanDebug", "✅ SCAN DEVICE STATIC INFO FOUND:");
-                                Log.d("ScanDebug", "   Battery Level: " + deviceInfo.getBattery() + "%");
-                                Log.d("ScanDebug", "   Firmware Version: " + deviceInfo.getFirmwareVersion());
-                                Log.d("ScanDebug", "   MAC Address: " + deviceInfo.getMacAddress());
-                                Log.d("ScanDebug", "   Frame Version: " + deviceInfo.getFrameVersion());
+                                
+                                
+                                
+                                
+                                
                             } else {
-                                Log.d("ScanDebug", "❌ SCAN DEVICE STATIC INFO FRAME NOT AVAILABLE");
+                                
                             }
                             
                             // Check CombinationFrame for temperature
                             com.minew.ble.mst03.frames.CombinationFrame comboFrame = 
                                 (com.minew.ble.mst03.frames.CombinationFrame) mst03Entity.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
                             if (comboFrame != null) {
-                                Log.d("ScanDebug", "✅ SCAN COMBINATION FRAME FOUND:");
-                                Log.d("ScanDebug", "   Temperature: " + comboFrame.getTemperature() + "°C");
-                                Log.d("ScanDebug", "   xAxis: " + comboFrame.getxAxis());
-                                Log.d("ScanDebug", "   yAxis: " + comboFrame.getyAxis());
-                                Log.d("ScanDebug", "   zAxis: " + comboFrame.getzAxis());
+                                
+                                
+                                
+                                
+                                
                             } else {
-                                Log.d("ScanDebug", "❌ SCAN COMBINATION FRAME NOT AVAILABLE");
+                                
                             }
                             
-                            Log.d("ScanDebug", "--- END CRITICAL SCAN DATA ---");
+                            
                             
                             // Log all available frames in scan result
-                            Log.d("ScanDebug", "--- BACKGROUND SCAN FRAMES ---");
+                            
                             try {
                                 com.minew.ble.v3.enums.FrameType[] allFrameTypes = com.minew.ble.v3.enums.FrameType.values();
                                 for (com.minew.ble.v3.enums.FrameType frameType : allFrameTypes) {
                                     try {
                                         Object frame = mst03Entity.getMinewFrame(frameType);
                                         if (frame != null) {
-                                            Log.d("ScanDebug", "Background Scan Frame: " + frameType + " - AVAILABLE");
-                                            Log.d("ScanDebug", "  Frame Object: " + frame.getClass().getSimpleName());
-                                            Log.d("ScanDebug", "  Frame toString: " + frame.toString());
-                                            
-                                            // Try to get specific data based on frame type
-                                            if (frame instanceof com.minew.ble.mst03.frames.DeviceStaticInfoFrame) {
-                                                Log.d("ScanDebug", "  Background Scan Device Info:");
-                                                Log.d("ScanDebug", "    - MAC: " + ((com.minew.ble.mst03.frames.DeviceStaticInfoFrame) frame).getMacAddress());
-                                                Log.d("ScanDebug", "    - Battery: " + ((com.minew.ble.mst03.frames.DeviceStaticInfoFrame) frame).getBattery() + "%");
-                                                Log.d("ScanDebug", "    - Firmware: " + ((com.minew.ble.mst03.frames.DeviceStaticInfoFrame) frame).getFirmwareVersion());
-                                            } else if (frame instanceof com.minew.ble.mst03.frames.CombinationFrame) {
-                                                Log.d("ScanDebug", "  Background Scan Combination Frame:");
-                                                Log.d("ScanDebug", "    - Temperature: " + ((com.minew.ble.mst03.frames.CombinationFrame) frame).getTemperature() + "°C");
-                                            }
+                                            Log.d(TAG, "[Beacon Data] MAC: " + mst03Entity.getMacAddress() + ", FrameType: " + frameType + ", Data: " + frame.toString());
                                         } else {
-                                            Log.d("ScanDebug", "Background Scan Frame: " + frameType + " - NULL");
+                                            Log.d(TAG, "[Beacon Data] MAC: " + mst03Entity.getMacAddress() + ", FrameType: " + frameType + ", Data: null");
                                         }
                                     } catch (Exception e) {
-                                        Log.d("ScanDebug", "Background Scan Frame: " + frameType + " - ERROR: " + e.getMessage());
+                                        Log.e(TAG, "[Beacon Data] Error logging frameType: " + frameType, e);
                                     }
                                 }
                             } catch (Exception e) {
-                                Log.d("ScanDebug", "Background Scan Frames Error: " + e.getMessage());
+                                Log.e(TAG, "[Beacon Data] Error logging all frame types", e);
                             }
-                            Log.d("ScanDebug", "=== END BACKGROUND SCAN DEVICE DISCOVERED ===");
+                            
                         }
                         
                         // Update the shared device manager

@@ -27,17 +27,17 @@ public class ScanDevicesListAdapter extends BaseQuickAdapter<MST03Entity, BaseVi
     private OnConnectClickListener onConnectClickListener;
     
     public void setOnConnectClickListener(OnConnectClickListener listener) {
-        Log.d("ScanDebug", "=== SETTING ADAPTER CLICK LISTENER ===");
-        Log.d("ScanDebug", "Listener: " + (listener != null));
+        
+        
         this.onConnectClickListener = listener;
-        Log.d("ScanDebug", "Adapter click listener set to: " + (this.onConnectClickListener != null));
-        Log.d("ScanDebug", "=== ADAPTER CLICK LISTENER SET COMPLETED ===");
+        
+        
     }
     
     private boolean connectButtonsEnabled = true;
     
     public void setConnectButtonsEnabled(boolean enabled) {
-        Log.d("ScanDebug", "Setting connect buttons enabled: " + enabled);
+        
         this.connectButtonsEnabled = enabled;
         notifyDataSetChanged();
     }
@@ -161,32 +161,29 @@ public class ScanDevicesListAdapter extends BaseQuickAdapter<MST03Entity, BaseVi
             connectButton.setEnabled(connectButtonsEnabled);
             connectButton.setAlpha(connectButtonsEnabled ? 1.0f : 0.5f);
             connectButton.setVisibility(View.VISIBLE);
-            
-            Log.d("ScanDebug", "✅ Connect button VISIBLE for device: " + mst03Entity.getMacAddress() + 
-                  " (Temp: " + tempValue + "°C, HasDeviceInfo: " + hasDeviceInfo + ", Alert: " + hasAlert + ", Enabled: " + connectButtonsEnabled + ")");
+            Log.d("ScanDebug", " (Temp: " + tempValue + "°C, HasDeviceInfo: " + hasDeviceInfo + ", Alert: " + hasAlert + ", Enabled: " + connectButtonsEnabled + ")");
         } else {
             // Hide button for devices without any valid data
             connectButton.setVisibility(View.GONE);
-            Log.d("ScanDebug", "❌ Connect button HIDDEN for device: " + mst03Entity.getMacAddress() + 
-                  " (No valid data - tempValue: " + tempValue + ", hasDeviceInfo: " + hasDeviceInfo + ")");
+            Log.d("ScanDebug", " (No valid data - tempValue: " + tempValue + ", hasDeviceInfo: " + hasDeviceInfo + ")");
         }
         
         connectButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Log.d("ScanDebug", "=== CONNECT BUTTON CLICKED ===");
-                Log.d("ScanDebug", "Device: " + mst03Entity.getMacAddress());
-                Log.d("ScanDebug", "connectButtonsEnabled: " + connectButtonsEnabled);
-                Log.d("ScanDebug", "onConnectClickListener: " + (onConnectClickListener != null));
+                
+                
+                
+                
                 
                 if (mst03Entity != null && connectButtonsEnabled) {
-                    Log.d("ScanDebug", "Button clicked for device: " + mst03Entity.getMacAddress() + " (Alert: " + hasAlert + ")");
+                    
                     
                     if (onConnectClickListener != null) {
-                        Log.d("ScanDebug", "Calling onConnectClickListener.onConnectClick");
+                        
                         try {
                             onConnectClickListener.onConnectClick(mst03Entity);
-                            Log.d("ScanDebug", "onConnectClickListener.onConnectClick completed successfully");
+                            
                         } catch (Exception e) {
                             Log.e("ScanDebug", "Error calling onConnectClickListener: " + e.getMessage());
                             e.printStackTrace();
@@ -195,10 +192,10 @@ public class ScanDevicesListAdapter extends BaseQuickAdapter<MST03Entity, BaseVi
                         Log.e("ScanDebug", "onConnectClickListener is null!");
                     }
                 } else {
-                    Log.d("ScanDebug", "Button click ignored - enabled: " + connectButtonsEnabled + ", device: " + (mst03Entity != null));
+                    
                 }
                 
-                Log.d("ScanDebug", "=== CONNECT BUTTON CLICK COMPLETED ===");
+                
             }
         });
         

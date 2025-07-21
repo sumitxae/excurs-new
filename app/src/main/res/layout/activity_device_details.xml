@@ -286,7 +286,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_gravity="center"
-                            android:text="Temperature Graph\n(Coming Soon)"
+                            android:text="\nTemperature Graph"
                             android:textColor="@color/text_secondary"
                             android:textSize="16sp"
                             android:gravity="center"

@@ -330,6 +330,7 @@ public class DeviceConnectedCompleteActivity extends BaseActivity{
 
                     @Override
                     public void OnQueryResult(boolean b, HistoryHtData historyHtData) {
+                        Log.d("BeaconRawData", "OnQueryResult called, success=" + b + ", historyHtData=" + historyHtData);
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
