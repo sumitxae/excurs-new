@@ -1131,37 +1131,45 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
     
     private void processHistoricalDataForLocalDisplay(List<HtData> htDataList) {
-        
         // Log each piece of beacon data (raw data)
         for (int i = 0; i < htDataList.size(); i++) {
             HtData htData = htDataList.get(i);
             Log.d("BeaconRawData", "Raw data: " + htData.toString());
         }
-        
+
+        // Find the last excursion start (last transition from normal to excursion)
+        int lastExcursionStartIndex = -1;
+        boolean wasInNormalRange = false;
+        for (int i = 0; i < htDataList.size(); i++) {
+            float temp = htDataList.get(i).getTemperature();
+            boolean isNormal = (temp >= 2.0f && temp <= 8.0f);
+            if (wasInNormalRange && !isNormal) {
+                lastExcursionStartIndex = i;
+            }
+            wasInNormalRange = isNormal;
+        }
+        // If found, filter data from that point onward; else use all data
+        List<HtData> filteredData;
+        if (lastExcursionStartIndex != -1) {
+            filteredData = htDataList.subList(lastExcursionStartIndex, htDataList.size());
+        } else {
+            filteredData = htDataList;
+        }
+
         // Clear previous data
         processedHistoricalData.clear();
         processedExcursionData.clear();
-        
-        // Add all historical data
-        processedHistoricalData.addAll(htDataList);
-        
+        // Add filtered data
+        processedHistoricalData.addAll(filteredData);
         // Analyze excursions for local display
-        analyzeExcursionsForLocalDisplay(htDataList);
-        
+        analyzeExcursionsForLocalDisplay(filteredData);
         // Mark processing as complete
         isDataProcessingComplete = true;
-        
-        
         // Disconnect from device immediately after data processing is complete
         if (mst03Entity != null && mBleManager != null) {
-            
             mBleManager.disConnect(mst03Entity.getMacAddress());
-            
-            // Reset connection state but keep the device entity for display purposes
             isConnecting = false;
             mDevicesListAdapter.setConnectButtonsEnabled(true);
-            
-            
         }
     }
     
