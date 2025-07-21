@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace 'com.minew.mst03demo'
+    namespace 'choruscoldchain.app'
     compileSdk 33
 
     defaultConfig {
-        applicationId "com.minew.mst03demo"
+        applicationId "choruscoldchain.app"
         minSdk 24
         targetSdk 33
         versionCode 1

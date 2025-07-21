@@ -1,4 +1,4 @@
-package com.minew.mst03demo;
+package choruscoldchain.app;
 
 import android.Manifest;
 import android.animation.ObjectAnimator;
@@ -36,7 +36,7 @@ import com.minew.ble.v3.interfaces.OnConnStateListener;
 import com.minew.ble.v3.interfaces.OnScanDevicesResultListener;
 import com.minew.ble.v3.interfaces.OnQueryResultListener;
 import com.minew.ble.v3.utils.BLETool;
-import com.minew.mst03demo.databinding.ActivityScanDevicesBinding;
+import choruscoldchain.app.databinding.ActivityScanDevicesBinding;
 import com.permissionx.guolindev.PermissionX;
 import com.permissionx.guolindev.callback.ExplainReasonCallback;
 import com.permissionx.guolindev.callback.ForwardToSettingsCallback;
@@ -337,11 +337,12 @@ public class ScanDevicesListActivity extends BaseActivity {
                 mDevicesListAdapter.notifyDataSetChanged(); // Force UI refresh
                 
                 
-                String resultText = filteredDevices.size() + " device(s) found";
-                if (filteredDevices.size() == 0) {
-                    resultText = "No devices found matching '" + searchText + "'";
-                }
-                Toast.makeText(this, resultText, Toast.LENGTH_SHORT).show();
+                // Removed repeated toast here to prevent spamming user on every search keystroke
+                // String resultText = filteredDevices.size() + " device(s) found";
+                // if (filteredDevices.size() == 0) {
+                //     resultText = "No devices found matching '" + searchText + "'";
+                // }
+                // Toast.makeText(this, resultText, Toast.LENGTH_SHORT).show();
                 
                 
             } else {

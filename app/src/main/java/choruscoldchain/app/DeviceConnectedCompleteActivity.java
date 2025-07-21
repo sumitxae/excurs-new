@@ -1,4 +1,4 @@
-package com.minew.mst03demo;
+package choruscoldchain.app;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
@@ -41,7 +41,7 @@ import com.minew.ble.v3.interfaces.OnQueryResultListener;
 import com.minew.ble.v3.utils.LogUtil;
 import com.minew.ble.v3.utils.MinewExecutors;
 import com.minew.ble.v3.utils.ZipUtil;
-import com.minew.mst03demo.databinding.ActivityDeviceConnectedCompleteBinding;
+import choruscoldchain.app.databinding.ActivityDeviceConnectedCompleteBinding;
 import com.permissionx.guolindev.PermissionX;
 import com.permissionx.guolindev.callback.ExplainReasonCallback;
 import com.permissionx.guolindev.callback.ForwardToSettingsCallback;

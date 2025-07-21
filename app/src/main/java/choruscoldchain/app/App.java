@@ -1,4 +1,4 @@
-package com.minew.mst03demo;
+package choruscoldchain.app;
 
 import android.app.Application;
 

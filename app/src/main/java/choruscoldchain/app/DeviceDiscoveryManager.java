@@ -1,4 +1,4 @@
-package com.minew.mst03demo;
+package choruscoldchain.app;
 
 import android.util.Log;
 import com.minew.ble.mst03.bean.MST03Entity;

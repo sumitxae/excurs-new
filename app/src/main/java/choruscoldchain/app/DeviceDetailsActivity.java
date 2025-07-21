@@ -1,4 +1,4 @@
-package com.minew.mst03demo;
+package choruscoldchain.app;
 
 import android.content.Context;
 import android.content.Intent;
@@ -22,7 +22,7 @@ import com.github.mikephil.charting.highlight.Highlight;
 import com.minew.ble.mst03.bean.MST03Entity;
 import com.minew.ble.mst03.bean.HistoryHtData;
 import com.minew.ble.mst03.bean.HtData;
-import com.minew.mst03demo.ExcursionData;
+import choruscoldchain.app.ExcursionData;
 import com.minew.ble.mst03.frames.DeviceStaticInfoFrame;
 import com.minew.ble.mst03.frames.CombinationFrame;
 import com.minew.ble.v3.enums.FrameType;
@@ -70,6 +70,9 @@ public class DeviceDetailsActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_device_details);
+        // Ensure status bar icons are dark for visibility on light background
+        View decor = getWindow().getDecorView();
+        decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         
         // Get device from intent
         device = getIntent().getParcelableExtra(EXTRA_DEVICE);

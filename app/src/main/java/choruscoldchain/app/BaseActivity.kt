@@ -1,4 +1,4 @@
-package com.minew.mst03demo
+package choruscoldchain.app
 
 import androidx.annotation.DrawableRes
 import androidx.appcompat.app.AppCompatActivity

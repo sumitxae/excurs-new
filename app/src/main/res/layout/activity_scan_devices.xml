@@ -27,14 +27,14 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginBottom="12dp">
+            android:layout_marginBottom="1dp">
 
             <TextView
                 android:id="@+id/tv_app_title"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Chorus Cold Chain Beacon App"
+                android:text="Chorus Cold Chain"
                 android:textColor="@color/text_primary"
                 android:textStyle="bold"
                 android:textSize="20sp" />
@@ -52,15 +52,13 @@
 
         </LinearLayout>
 
-
-
         <!-- Search Bar Row -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginTop="16dp">
+            android:layout_marginTop="5dp">
             <EditText
                 android:id="@+id/et_search"
                 android:layout_width="0dp"
