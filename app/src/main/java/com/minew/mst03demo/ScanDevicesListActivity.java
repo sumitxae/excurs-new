@@ -79,6 +79,7 @@ public class ScanDevicesListActivity extends BaseActivity {
     private static final int SEARCH_DEBOUNCE_DELAY = 500;
     private DeviceDiscoveryManager deviceManager;
     private DeviceDiscoveryManager.OnDevicesUpdatedListener deviceUpdateListener; 
+    private boolean permissionsGranted = false;
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -93,8 +94,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         initRefresh();
         initRecyclerView();
-        initAnimator();
-        initBleManager();
+        // BLE/scan-related initialization moved to permission callback
         initBlePermission();
         
         // Initialize device manager and listen for updates
@@ -103,9 +103,7 @@ public class ScanDevicesListActivity extends BaseActivity {
             @Override
             public void onDevicesUpdated(List<MST03Entity> devices) {
                 runOnUiThread(() -> {
-                    
                     updateAllDiscoveredDevices(devices);
-                    
                     // Update UI based on current search mode
                     if (isSearchMode && binding.etSearch.getText().toString().trim().length() > 0) {
                         // Re-apply current search filter
@@ -113,17 +111,15 @@ public class ScanDevicesListActivity extends BaseActivity {
                         filterDevices(currentSearchText);
                     } else {
                         mDevicesListAdapter.setList(allDiscoveredDevices);
+                        mDevicesListAdapter.notifyDataSetChanged(); // Force UI refresh
                     }
                 });
             }
         };
         deviceManager.addListener(deviceUpdateListener);
-        
         // Don't start background service here - wait for permissions
         // startBackgroundScanService();
-        
         httpLogger = new HttpLogger();
-        
         setupSearchFunctionality();
     }
 
@@ -338,6 +334,7 @@ public class ScanDevicesListActivity extends BaseActivity {
             
             if (mDevicesListAdapter != null) {
                 mDevicesListAdapter.setList(filteredDevices);
+                mDevicesListAdapter.notifyDataSetChanged(); // Force UI refresh
                 
                 
                 String resultText = filteredDevices.size() + " device(s) found";
@@ -399,6 +396,7 @@ public class ScanDevicesListActivity extends BaseActivity {
             
             if (mDevicesListAdapter != null) {
                 mDevicesListAdapter.setList(filteredDevices);
+                mDevicesListAdapter.notifyDataSetChanged(); // Force UI refresh
                 
                 
                 String resultText = filteredDevices.size() + " device(s) found";
@@ -442,6 +440,7 @@ public class ScanDevicesListActivity extends BaseActivity {
             
             if (mDevicesListAdapter != null && allDiscoveredDevices != null) {
                 mDevicesListAdapter.setList(allDiscoveredDevices);
+                mDevicesListAdapter.notifyDataSetChanged(); // Force UI refresh
                 
             } else {
                 
@@ -684,6 +683,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         mObjectAnimator.setRepeatCount(ValueAnimator.INFINITE);
         
         binding.ibHomeScan.setOnClickListener(v -> {
+            if (!permissionsGranted || mObjectAnimator == null) return;
             stopScan();
             startScan();
             mObjectAnimator.start();
@@ -691,6 +691,7 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
 
     private void initBleManager(){
+        if (!permissionsGranted) return;
         try {
             mBleManager = MST03SensorBleManager.getInstance();
             if (mBleManager == null) {
@@ -733,6 +734,7 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
     
     private void startBackgroundScanService() {
+        if (!permissionsGranted) return;
         try {
             Intent serviceIntent = new Intent(this, BackgroundScanService.class);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -893,12 +895,16 @@ public class ScanDevicesListActivity extends BaseActivity {
                 .request(new RequestCallback() {
                     @Override
                     public void onResult(boolean allGranted, @NonNull List<String> grantedList, @NonNull List<String> deniedList) {
+                        permissionsGranted = allGranted;
                         if(allGranted){
+                            // Only now initialize BLE/scan logic
+                            initAnimator();
+                            initBleManager();
                             checkoutBluetooth();
                             // Start background service after permissions are granted
                             startBackgroundScanService();
                         }else{
-                            Toast.makeText(ScanDevicesListActivity.this, "The following permissions are denied", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(ScanDevicesListActivity.this, "The following permissions are denied. BLE scanning will not work.", Toast.LENGTH_LONG).show();
                         }
                     }
                 });
@@ -928,8 +934,7 @@ public class ScanDevicesListActivity extends BaseActivity {
 
 
     private void startScan(){
-        
-        
+        if (!permissionsGranted || mObjectAnimator == null) return;
         // The background service is handling all scanning
         // This method is kept for compatibility but doesn't start its own scan
         if (isBackgroundServiceRunning()) {
@@ -944,42 +949,32 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
     
     private void updateAllDiscoveredDevices(List<MST03Entity> newDevices) {
-        
-        java.util.Map<String, MST03Entity> existingDevicesMap = new java.util.HashMap<>();
-        for (MST03Entity device : allDiscoveredDevices) {
-            existingDevicesMap.put(device.getMacAddress(), device);
+        java.util.Map<String, Integer> existingDevicesIndexMap = new java.util.HashMap<>();
+        for (int i = 0; i < allDiscoveredDevices.size(); i++) {
+            existingDevicesIndexMap.put(allDiscoveredDevices.get(i).getMacAddress(), i);
         }
-        
-        
         for (MST03Entity newDevice : newDevices) {
             String macAddress = newDevice.getMacAddress();
-            if (existingDevicesMap.containsKey(macAddress)) {
-                
-                MST03Entity existingDevice = existingDevicesMap.get(macAddress);
-                
-                existingDevice.setRssi(newDevice.getRssi());
-                
+            if (existingDevicesIndexMap.containsKey(macAddress)) {
+                // Replace the old device object with the new one
+                int index = existingDevicesIndexMap.get(macAddress);
+                allDiscoveredDevices.set(index, newDevice);
             } else {
-                
                 allDiscoveredDevices.add(newDevice);
             }
         }
-        
-        
         allDiscoveredDevices.sort(new Comparator<MST03Entity>() {
             @Override
             public int compare(MST03Entity o1, MST03Entity o2) {
                 return o2.getRssi() - o1.getRssi();
             }
         });
-        
-        
     }
 
     private void stopScan(){
-        
-        // Only stop the animation, background service continues scanning
-        mObjectAnimator.cancel();
+        if (mObjectAnimator != null) {
+            mObjectAnimator.cancel();
+        }
     }
     
     private boolean isBackgroundServiceRunning() {

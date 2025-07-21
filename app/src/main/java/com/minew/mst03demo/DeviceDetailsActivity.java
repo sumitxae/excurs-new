@@ -30,6 +30,7 @@ import com.minew.ble.v3.interfaces.OnQueryResultListener;
 
 import java.util.ArrayList;
 import java.util.List;
+import android.widget.ImageView;
 
 public class DeviceDetailsActivity extends AppCompatActivity {
 
@@ -52,9 +53,9 @@ public class DeviceDetailsActivity extends AppCompatActivity {
     private LineChart lineChart;
     private TextView tvGraphPlaceholder;
     private View loadingOverlay;
-    private TextView tvLoadingText;
+    // private TextView tvLoadingText;
     private View firmwareContainer;
-    private com.google.android.material.button.MaterialButton btnUpgradeFirmware;
+    private ImageView ivUpgradeFirmware;
 
     public static Intent newIntent(Context context, MST03Entity device, int batteryLevel, String firmwareVersion, float currentTemperature) {
         Intent intent = new Intent(context, DeviceDetailsActivity.class);
@@ -118,9 +119,9 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         lineChart = findViewById(R.id.graph_container);
         tvGraphPlaceholder = findViewById(R.id.tv_graph_placeholder);
         loadingOverlay = findViewById(R.id.loading_overlay);
-        tvLoadingText = findViewById(R.id.tv_loading_text);
+        // tvLoadingText = findViewById(R.id.tv_loading_text);
         firmwareContainer = findViewById(R.id.firmware_container);
-        btnUpgradeFirmware = findViewById(R.id.btn_upgrade_firmware);
+        ivUpgradeFirmware = findViewById(R.id.iv_upgrade_firmware);
     }
 
     private void setupBackButton() {
@@ -140,15 +141,19 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         if (isAdmin) {
             // Show firmware container and upgrade button for admin
             firmwareContainer.setVisibility(View.VISIBLE);
-            btnUpgradeFirmware.setVisibility(View.VISIBLE);
-            
-            // Set up firmware upgrade button click listener
-            btnUpgradeFirmware.setOnClickListener(v -> handleFirmwareUpgrade());
+            if (ivUpgradeFirmware != null) {
+                ivUpgradeFirmware.setVisibility(View.VISIBLE);
+                ivUpgradeFirmware.setOnClickListener(v -> handleFirmwareUpgrade());
+            }
             
             Log.d("DeviceDetails", "User is admin - showing firmware controls");
         } else {
             // Hide firmware container for regular users
             firmwareContainer.setVisibility(View.GONE);
+            if (ivUpgradeFirmware != null) {
+                ivUpgradeFirmware.setVisibility(View.GONE);
+                ivUpgradeFirmware.setOnClickListener(null);
+            }
             Log.d("DeviceDetails", "User is not admin - hiding firmware controls. Role: " + userRole);
         }
     }
@@ -360,9 +365,9 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         }
         
         // Update loading text
-        if (tvLoadingText != null) {
-            tvLoadingText.setText("Fetching historical data...");
-        }
+        // if (tvLoadingText != null) {
+        //     tvLoadingText.setText("Fetching historical data...");
+        // }
         
         // Show placeholder text for statistics
         tvAvgTemperature.setText("Loading...");

@@ -181,22 +181,17 @@
                                 android:textColor="@color/text_secondary"
                                 android:textSize="14sp" />
 
-                        </LinearLayout>
+                            <ImageView
+                                android:id="@+id/iv_upgrade_firmware"
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:src="@drawable/ic_upgrade"
+                                android:contentDescription="Upgrade Firmware"
+                                android:visibility="gone"
+                                android:layout_marginStart="8dp"
+                                android:tint="@color/primary" />
 
-                        <!-- Firmware Upgrade Button (Admin Only) -->
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_upgrade_firmware"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="end"
-                            android:text="Upgrade Firmware"
-                            android:textSize="12sp"
-                            android:paddingStart="16dp"
-                            android:paddingEnd="16dp"
-                            android:paddingTop="8dp"
-                            android:paddingBottom="8dp"
-                            android:visibility="gone"
-                            style="@style/Widget.Material3.Button.OutlinedButton" />
+                        </LinearLayout>
 
                     </LinearLayout>
 
@@ -339,14 +334,14 @@
                                 android:indeterminateTint="@color/primary"
                                 android:layout_marginBottom="16dp" />
 
-                            <TextView
+                            <!-- <TextView
                                 android:id="@+id/tv_loading_text"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="Fetching historical data..."
                                 android:textColor="@color/text_primary"
                                 android:textSize="14sp"
-                                android:textStyle="bold" />
+                                android:textStyle="bold" /> -->
 
                         </LinearLayout>
 

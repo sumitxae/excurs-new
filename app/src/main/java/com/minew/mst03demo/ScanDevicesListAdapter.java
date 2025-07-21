@@ -142,62 +142,20 @@ public class ScanDevicesListAdapter extends BaseQuickAdapter<MST03Entity, BaseVi
             }
         }
         
-        View connectButton = baseViewHolder.getView(R.id.btn_connect);
-        TextView buttonText = baseViewHolder.getView(R.id.btn_connect);
-        
-        // Determine if there's an alert (temperature outside normal range)
-        // Normal temperature range: 2-8°C (cold storage range)
-        boolean hasAlert = !Float.isNaN(tempValue) && tempValue != 0.0f && (tempValue > 8.0f || tempValue < 2.0f);
-        
-        // Show connect button for devices with valid data (either temperature or device info)
-        boolean hasValidTemperature = !Float.isNaN(tempValue) && tempValue != 0.0f;
-        boolean hasDeviceInfo = deviceStaticInfoFrame != null;
-        boolean hasValidData = hasValidTemperature || hasDeviceInfo;
-        
-        if (hasValidData) {
-            // Show "Connect" button for devices with valid data
-            buttonText.setText("Connect");
-            buttonText.setBackgroundResource(R.drawable.bg_connect_button);
-            connectButton.setEnabled(connectButtonsEnabled);
-            connectButton.setAlpha(connectButtonsEnabled ? 1.0f : 0.5f);
-            connectButton.setVisibility(View.VISIBLE);
-            Log.d("ScanDebug", " (Temp: " + tempValue + "°C, HasDeviceInfo: " + hasDeviceInfo + ", Alert: " + hasAlert + ", Enabled: " + connectButtonsEnabled + ")");
-        } else {
-            // Hide button for devices without any valid data
-            connectButton.setVisibility(View.GONE);
-            Log.d("ScanDebug", " (No valid data - tempValue: " + tempValue + ", hasDeviceInfo: " + hasDeviceInfo + ")");
-        }
-        
-        connectButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                
-                
-                
-                
-                
-                if (mst03Entity != null && connectButtonsEnabled) {
-                    
-                    
-                    if (onConnectClickListener != null) {
-                        
-                        try {
-                            onConnectClickListener.onConnectClick(mst03Entity);
-                            
-                        } catch (Exception e) {
-                            Log.e("ScanDebug", "Error calling onConnectClickListener: " + e.getMessage());
-                            e.printStackTrace();
-                        }
-                    } else {
-                        Log.e("ScanDebug", "onConnectClickListener is null!");
-                    }
-                } else {
-                    
-                }
-                
-                
+        android.widget.Button btnConnect = baseViewHolder.getView(R.id.btn_connect);
+        btnConnect.setText("Connect");
+        boolean showConnect = false;
+        if (!Float.isNaN(tempValue) && tempValue != 0.0f) {
+            // Only show if outside normal range
+            if (tempValue < 2.0f || tempValue > 8.0f) {
+                showConnect = true;
             }
-        });
+        }
+        btnConnect.setVisibility(showConnect && connectButtonsEnabled ? View.VISIBLE : View.GONE);
+        btnConnect.setOnClickListener(null);
+        if (showConnect && connectButtonsEnabled && onConnectClickListener != null) {
+            btnConnect.setOnClickListener(v -> onConnectClickListener.onConnectClick(mst03Entity));
+        }
         
         
     }
