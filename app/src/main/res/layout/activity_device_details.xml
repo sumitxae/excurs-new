@@ -283,21 +283,11 @@
                     android:orientation="vertical"
                     android:padding="20dp">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/temperature_history"
-                        android:textColor="@color/text_primary"
-                        android:textStyle="bold"
-                        android:textSize="18sp"
-                        android:layout_marginBottom="16dp" />
-
-                    <!-- Graph Container -->
+                    <!-- Chart area -->
                     <FrameLayout
                         android:layout_width="match_parent"
                         android:layout_height="300dp"
-
-                        android:padding="16dp">
+                        android:padding="8dp">
 
                         <!-- Placeholder for graph -->
                         <TextView
@@ -334,15 +324,6 @@
                                 android:indeterminateTint="@color/primary"
                                 android:layout_marginBottom="16dp" />
 
-                            <!-- <TextView
-                                android:id="@+id/tv_loading_text"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Fetching historical data..."
-                                android:textColor="@color/text_primary"
-                                android:textSize="14sp"
-                                android:textStyle="bold" /> -->
-
                         </LinearLayout>
 
                     </FrameLayout>
@@ -353,7 +334,7 @@
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:gravity="center"
-                        android:layout_marginTop="16dp">
+                        android:layout_marginTop="8dp">
 
                         <LinearLayout
                             android:layout_width="wrap_content"

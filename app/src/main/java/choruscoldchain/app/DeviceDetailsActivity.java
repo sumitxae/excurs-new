@@ -536,12 +536,14 @@ public class DeviceDetailsActivity extends AppCompatActivity {
 
     private void setupGraph() {
         // Initialize the chart
-        lineChart.getDescription().setEnabled(false);
+        lineChart.getDescription().setEnabled(false); // Remove chart title
         lineChart.setTouchEnabled(true);
         lineChart.setDragEnabled(true);
         lineChart.setScaleEnabled(true);
         lineChart.setPinchZoom(true);
         lineChart.setDrawGridBackground(false);
+        // Add extra offsets for axis labels
+        lineChart.setExtraOffsets(16, 8, 16, 24); // left, top, right, bottom
         
         // Enable marker view for showing details on touch
         lineChart.setMarker(new com.github.mikephil.charting.components.MarkerView(this, R.layout.marker_view) {
@@ -580,6 +582,9 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         xAxis.setPosition(XAxis.XAxisPosition.BOTTOM);
         xAxis.setDrawGridLines(false);
         xAxis.setGranularity(1f);
+        xAxis.setDrawAxisLine(true);
+        xAxis.setTextColor(getResources().getColor(R.color.text_primary));
+        xAxis.setTextSize(12f);
         xAxis.setValueFormatter(new ValueFormatter() {
             @Override
             public String getFormattedValue(float value) {
@@ -597,16 +602,33 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         leftAxis.setAxisMinimum(0f);   // Start from 0°C to show excursions below 2°C
         leftAxis.setAxisMaximum(12f);  // Go up to 12°C to accommodate excursions above 8°C
         leftAxis.setGranularity(2f);   // Show every 2°C
+        leftAxis.setDrawAxisLine(true);
+        leftAxis.setPosition(YAxis.YAxisLabelPosition.OUTSIDE_CHART);
+        
+        // Add Y-axis title
+        leftAxis.setDrawLabels(true);
+        leftAxis.setTextColor(getResources().getColor(R.color.text_primary));
+        leftAxis.setTextSize(12f);
         
         YAxis rightAxis = lineChart.getAxisRight();
         rightAxis.setEnabled(false);
         
-        // Legend - Disable to avoid multiple legends
-        lineChart.getLegend().setEnabled(false);
+        // Legend - Enable to show what each line represents
+        lineChart.getLegend().setEnabled(true);
+        lineChart.getLegend().setTextColor(getResources().getColor(R.color.text_primary));
+        lineChart.getLegend().setTextSize(12f);
+        lineChart.getLegend().setVerticalAlignment(com.github.mikephil.charting.components.Legend.LegendVerticalAlignment.TOP);
+        lineChart.getLegend().setHorizontalAlignment(com.github.mikephil.charting.components.Legend.LegendHorizontalAlignment.CENTER);
         
         // Enable highlighting for better touch interaction
         lineChart.setHighlightPerDragEnabled(true);
         lineChart.setHighlightPerTapEnabled(true);
+        
+        // Set animation duration
+        lineChart.animateX(1000);
+        
+        // Enable auto scaling
+        lineChart.setAutoScaleMinMaxEnabled(true);
         
         // Initially show placeholder
         lineChart.setVisibility(View.GONE);
@@ -622,10 +644,33 @@ public class DeviceDetailsActivity extends AppCompatActivity {
     // Removed updateStatistics() method - only used for sample data
 
     private void updateGraph() {
-        if (temperatureEntries.isEmpty()) return;
+        try {
+            if (temperatureEntries == null || temperatureEntries.isEmpty()) {
+                Log.w("DeviceDetails", "No temperature data available for chart");
+                showNoDataMessage();
+                return;
+            }
+        
+        // Calculate min and max for dynamic scaling
+        float minTemp = Float.MAX_VALUE;
+        float maxTemp = Float.MIN_VALUE;
+        for (Entry entry : temperatureEntries) {
+            minTemp = Math.min(minTemp, entry.getY());
+            maxTemp = Math.max(maxTemp, entry.getY());
+        }
+        
+        // Add padding to the range
+        float padding = Math.max(1.0f, (maxTemp - minTemp) * 0.1f);
+        float yMin = minTemp - padding;
+        float yMax = maxTemp + padding;
+        
+        // Update Y-axis range for dynamic scaling
+        YAxis leftAxis = lineChart.getAxisLeft();
+        leftAxis.setAxisMinimum(yMin);
+        leftAxis.setAxisMaximum(yMax);
         
         // Create temperature data set
-        LineDataSet temperatureDataSet = new LineDataSet(temperatureEntries, "");
+        LineDataSet temperatureDataSet = new LineDataSet(temperatureEntries, "Temperature");
         temperatureDataSet.setColor(getResources().getColor(R.color.primary));
         temperatureDataSet.setLineWidth(2f);
         temperatureDataSet.setCircleColor(getResources().getColor(R.color.primary));
@@ -635,7 +680,7 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         temperatureDataSet.setDrawValues(false);
         
         // Create upper alert line
-        LineDataSet upperAlertDataSet = new LineDataSet(alertUpperEntries, "");
+        LineDataSet upperAlertDataSet = new LineDataSet(alertUpperEntries, "Upper Alert (8°C)");
         upperAlertDataSet.setColor(getResources().getColor(R.color.error));
         upperAlertDataSet.setLineWidth(1f);
         upperAlertDataSet.setDrawCircles(false);
@@ -644,7 +689,7 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         upperAlertDataSet.enableDashedLine(10f, 5f, 0f);
         
         // Create lower alert line
-        LineDataSet lowerAlertDataSet = new LineDataSet(alertLowerEntries, "");
+        LineDataSet lowerAlertDataSet = new LineDataSet(alertLowerEntries, "Lower Alert (2°C)");
         lowerAlertDataSet.setColor(getResources().getColor(R.color.error));
         lowerAlertDataSet.setLineWidth(1f);
         lowerAlertDataSet.setDrawCircles(false);
@@ -662,5 +707,9 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         // Show chart and hide placeholder
         lineChart.setVisibility(View.VISIBLE);
         tvGraphPlaceholder.setVisibility(View.GONE);
+        } catch (Exception e) {
+            Log.e("DeviceDetails", "Error updating chart: " + e.getMessage(), e);
+            showNoDataMessage();
+        }
     }
 } 

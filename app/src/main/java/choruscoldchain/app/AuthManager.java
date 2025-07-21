@@ -17,6 +17,9 @@ public class AuthManager {
     private static final String KEY_USER_EMAIL = "user_email";
     private static final String KEY_IS_LOGGED_IN = "is_logged_in";
     private static final String KEY_USER_ROLE = "user_role";
+    private static final String KEY_SAVED_EMAIL = "saved_email";
+    private static final String KEY_SAVED_PASSWORD = "saved_password";
+    private static final String KEY_REMEMBER_ME = "remember_me";
     
     private static AuthManager instance;
     private final Context context;
@@ -285,6 +288,40 @@ public class AuthManager {
         editor.putString(KEY_USER_ROLE, role);
         editor.putBoolean(KEY_IS_LOGGED_IN, true);
         editor.apply();
+    }
+    
+    public void saveCredentials(String email, String password, boolean rememberMe) {
+        SharedPreferences.Editor editor = prefs.edit();
+        if (rememberMe) {
+            editor.putString(KEY_SAVED_EMAIL, email);
+            editor.putString(KEY_SAVED_PASSWORD, password);
+            editor.putBoolean(KEY_REMEMBER_ME, true);
+        } else {
+            editor.remove(KEY_SAVED_EMAIL);
+            editor.remove(KEY_SAVED_PASSWORD);
+            editor.putBoolean(KEY_REMEMBER_ME, false);
+        }
+        editor.apply();
+    }
+    
+    public void clearSavedCredentials() {
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.remove(KEY_SAVED_EMAIL);
+        editor.remove(KEY_SAVED_PASSWORD);
+        editor.putBoolean(KEY_REMEMBER_ME, false);
+        editor.apply();
+    }
+    
+    public String getSavedEmail() {
+        return prefs.getString(KEY_SAVED_EMAIL, null);
+    }
+    
+    public String getSavedPassword() {
+        return prefs.getString(KEY_SAVED_PASSWORD, null);
+    }
+    
+    public boolean isRememberMeEnabled() {
+        return prefs.getBoolean(KEY_REMEMBER_ME, false);
     }
     
     public void logout() {

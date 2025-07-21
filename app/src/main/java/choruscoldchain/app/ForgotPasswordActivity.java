@@ -1,22 +1,25 @@
 package choruscoldchain.app;
 
 import android.content.Intent;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.util.Log;
+import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.textfield.TextInputEditText;
-import com.google.android.material.textfield.TextInputLayout;
-import android.widget.TextView;
+import java.io.IOException;
+import java.io.InputStream;
 
 public class ForgotPasswordActivity extends AppCompatActivity {
     private static final String TAG = "ForgotPasswordActivity";
     
-    private TextInputLayout tilEmail;
-    private TextInputEditText etEmail;
-    private MaterialButton btnSendOtp;
-    private TextView tvBackToSignIn;
+    private EditText etEmail;
+    private MaterialButton btnSubmit;
+    private MaterialButton btnBackToLogin;
+    private ImageView ivChorusLogo;
     
     private AuthManager authManager;
     
@@ -29,47 +32,75 @@ public class ForgotPasswordActivity extends AppCompatActivity {
         
         initViews();
         setupListeners();
+        loadChorusLogo();
     }
     
     private void initViews() {
-        tilEmail = findViewById(R.id.tilEmail);
         etEmail = findViewById(R.id.etEmail);
-        btnSendOtp = findViewById(R.id.btnSendOtp);
-        tvBackToSignIn = findViewById(R.id.tvBackToSignIn);
+        btnSubmit = findViewById(R.id.btnSubmit);
+        btnBackToLogin = findViewById(R.id.btnBackToLogin);
+        ivChorusLogo = findViewById(R.id.ivChorusLogo);
+    }
+    
+    private void loadChorusLogo() {
+        // Try to load chorus logo from assets in order of preference
+        String[] logoPaths = {
+            "images/chorus.png",           // Main chorus logo
+            "chorus_logo.png",             // Alternative chorus logo
+            "images/chorusWhite.jpeg"      // White version if needed
+        };
+        
+        for (String logoPath : logoPaths) {
+            try {
+                InputStream inputStream = getAssets().open(logoPath);
+                Drawable drawable = Drawable.createFromStream(inputStream, null);
+                ivChorusLogo.setImageDrawable(drawable);
+                inputStream.close();
+                Log.d(TAG, "Successfully loaded chorus logo from: " + logoPath);
+                return; // Successfully loaded, exit the method
+            } catch (IOException e) {
+                Log.d(TAG, "Could not load chorus logo from: " + logoPath);
+                // Continue to next option
+            }
+        }
+        
+        // Fallback to drawable if all asset loading fails
+        Log.w(TAG, "Falling back to drawable chorus logo");
+        ivChorusLogo.setImageResource(R.drawable.ic_chorus_logo);
     }
     
     private void setupListeners() {
-        btnSendOtp.setOnClickListener(v -> handleSendOtp());
-        tvBackToSignIn.setOnClickListener(v -> finish());
+        btnSubmit.setOnClickListener(v -> handleSubmit());
+        btnBackToLogin.setOnClickListener(v -> finish());
     }
     
-    private void handleSendOtp() {
+    private void handleSubmit() {
         String email = etEmail.getText().toString().trim();
         
         // Validation
         if (TextUtils.isEmpty(email)) {
-            tilEmail.setError("Please enter your email");
+            etEmail.setError("Please enter your email address.");
             return;
         }
         
         if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-            tilEmail.setError("Please enter a valid email");
+            etEmail.setError("Please enter a valid email address.");
             return;
         }
         
         // Clear previous errors
-        tilEmail.setError(null);
+        etEmail.setError(null);
         
         // Disable button and show loading
-        btnSendOtp.setEnabled(false);
-        btnSendOtp.setText("Sending OTP...");
+        btnSubmit.setEnabled(false);
+        btnSubmit.setText("Loading...");
         
         authManager.forgotPassword(email, new AuthManager.AuthCallback<AuthModels.ForgotPasswordResponse>() {
             @Override
             public void onSuccess(AuthModels.ForgotPasswordResponse result) {
                 runOnUiThread(() -> {
-                    btnSendOtp.setEnabled(true);
-                    btnSendOtp.setText("Send OTP");
+                    btnSubmit.setEnabled(true);
+                    btnSubmit.setText("Submit");
                     
                     if (result.isSuccess()) {
                         Toast.makeText(ForgotPasswordActivity.this, 
@@ -79,8 +110,7 @@ public class ForgotPasswordActivity extends AppCompatActivity {
                         navigateToVerifyOtp(email, result.getHashedUser(), true);
                     } else {
                         Toast.makeText(ForgotPasswordActivity.this, 
-                            result.getMessage() != null ? result.getMessage() : "Failed to send OTP", 
-                            Toast.LENGTH_LONG).show();
+                            "Failed to generate OTP. Please try again.", Toast.LENGTH_LONG).show();
                     }
                 });
             }
@@ -88,9 +118,10 @@ public class ForgotPasswordActivity extends AppCompatActivity {
             @Override
             public void onError(String error) {
                 runOnUiThread(() -> {
-                    btnSendOtp.setEnabled(true);
-                    btnSendOtp.setText("Send OTP");
-                    Toast.makeText(ForgotPasswordActivity.this, error, Toast.LENGTH_LONG).show();
+                    btnSubmit.setEnabled(true);
+                    btnSubmit.setText("Submit");
+                    Toast.makeText(ForgotPasswordActivity.this, 
+                        "Something went wrong. Please try again.", Toast.LENGTH_LONG).show();
                 });
             }
         });

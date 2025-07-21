@@ -126,7 +126,7 @@ public class ScanDevicesListActivity extends BaseActivity {
     private void showCustomMenu(View anchor) {
         android.view.LayoutInflater inflater = android.view.LayoutInflater.from(this);
         View menuView = inflater.inflate(R.layout.menu_logout_popup, null);
-        android.widget.TextView logoutBtn = menuView.findViewById(R.id.menu_logout);
+        android.widget.LinearLayout logoutBtn = menuView.findViewById(R.id.menu_logout);
         android.widget.PopupWindow popup = new android.widget.PopupWindow(menuView,
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
