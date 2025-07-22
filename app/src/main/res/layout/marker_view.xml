@@ -7,6 +7,15 @@
     android:padding="8dp">
 
     <TextView
+        android:id="@+id/tv_marker_date"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Date: --"
+        android:textColor="@color/text_primary"
+        android:textSize="12sp"
+        android:layout_marginBottom="4dp" />
+
+    <TextView
         android:id="@+id/tv_marker_time"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

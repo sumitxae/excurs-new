@@ -19,4 +19,5 @@
     <color name="success_background">#F0FDF4</color>
     <color name="success_border">#BBF7D0</color>
     <color name="normal_temp_shadow">#3B82F6</color> <!-- Blue color for normal temperature box shadow -->
+    <color name="blue">#3B82F6</color> <!-- Blue color for low threshold line -->
 </resources>

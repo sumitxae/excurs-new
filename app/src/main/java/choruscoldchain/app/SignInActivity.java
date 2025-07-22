@@ -20,6 +20,7 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AlertDialog;
@@ -33,7 +34,7 @@ public class SignInActivity extends AppCompatActivity {
     
     private EditText etEmail, etPassword;
     private MaterialButton btnSignIn;
-    private TextView tvForgotPassword, tvContactUs, tvSubtitle;
+    private TextView tvForgotPassword, tvSubtitle;
     private LinearLayout llPasswordContainer, llOptionsContainer;
     private ImageView ivPasswordToggle, ivChorusLogo;
     private CheckBox cbRememberMe;
@@ -55,6 +56,9 @@ public class SignInActivity extends AppCompatActivity {
             getWindow().getDecorView().getSystemUiVisibility() | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
         );
         
+        // Ensure proper keyboard handling
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        
         // Check if user is already logged in
         authManager = AuthManager.getInstance(this);
         if (authManager.isLoggedIn()) {
@@ -73,7 +77,7 @@ public class SignInActivity extends AppCompatActivity {
         etPassword = findViewById(R.id.etPassword);
         btnSignIn = findViewById(R.id.btnSignIn);
         tvForgotPassword = findViewById(R.id.tvForgotPassword);
-        tvContactUs = findViewById(R.id.tvContactUs);
+        // tvContactUs = findViewById(R.id.tvContactUs);
         tvSubtitle = findViewById(R.id.tvSubtitle);
         llPasswordContainer = findViewById(R.id.llPasswordContainer);
         llOptionsContainer = findViewById(R.id.llOptionsContainer);
@@ -112,7 +116,7 @@ public class SignInActivity extends AppCompatActivity {
     private void setupListeners() {
         btnSignIn.setOnClickListener(v -> handleSignIn());
         tvForgotPassword.setOnClickListener(v -> navigateToForgotPassword());
-        tvContactUs.setOnClickListener(v -> showContactUsDialog());
+        // tvContactUs.setOnClickListener(v -> showContactUsDialog());
         
         // Password visibility toggle
         ivPasswordToggle.setOnClickListener(v -> togglePasswordVisibility());
@@ -120,6 +124,31 @@ public class SignInActivity extends AppCompatActivity {
         // Remember me checkbox
         cbRememberMe.setOnCheckedChangeListener((buttonView, isChecked) -> {
             isRememberMeSelected = isChecked;
+        });
+        
+        // Add focus change listeners for better keyboard handling
+        etEmail.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus) {
+                // Scroll to make sure the input field is visible
+                v.post(() -> {
+                    ScrollView scrollView = findViewById(R.id.scrollView);
+                    if (scrollView != null) {
+                        scrollView.smoothScrollTo(0, v.getTop() - 100);
+                    }
+                });
+            }
+        });
+        
+        etPassword.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus) {
+                // Scroll to make sure the input field is visible
+                v.post(() -> {
+                    ScrollView scrollView = findViewById(R.id.scrollView);
+                    if (scrollView != null) {
+                        scrollView.smoothScrollTo(0, v.getTop() - 100);
+                    }
+                });
+            }
         });
     }
     

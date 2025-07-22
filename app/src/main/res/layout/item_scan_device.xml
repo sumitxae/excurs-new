@@ -111,15 +111,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Details"
-                android:textColor="@color/card_background"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:background="@drawable/bg_connect_button"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:paddingTop="4dp"
-                android:paddingBottom="4dp"
-                android:minHeight="24dp" />
+                style="@style/ConnectButtonStyle" />
         </LinearLayout>
 
     </LinearLayout>

@@ -44,18 +44,21 @@ public class DeviceDetailsActivity extends AppCompatActivity {
     private TextView tvDeviceMac;
     private TextView tvBatteryLevel;
     private TextView tvFirmwareVersion;
-    private TextView tvConnectionStatus;
+    private TextView tvExcursionEventAt;
     private TextView tvCurrentTemperature;
-    private TextView tvAvgTemperature;
-    private TextView tvMaxTemperature;
-    private TextView tvMinTemperature;
-    private TextView tvExcursionCount;
+    private TextView tvCurrentStatus;
+    // private TextView tvAvgTemperature;
+    // private TextView tvMaxTemperature;
+    // private TextView tvMinTemperature;
+    // private TextView tvExcursionCount;
     private LineChart lineChart;
     private TextView tvGraphPlaceholder;
     private View loadingOverlay;
     // private TextView tvLoadingText;
     private View firmwareContainer;
     private ImageView ivUpgradeFirmware;
+    private android.os.Handler statusRefreshHandler = new android.os.Handler();
+    private static final int STATUS_REFRESH_INTERVAL = 1000; // 1 second
 
     public static Intent newIntent(Context context, MST03Entity device, int batteryLevel, String firmwareVersion, float currentTemperature) {
         Intent intent = new Intent(context, DeviceDetailsActivity.class);
@@ -99,8 +102,15 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         setupGraph();
         setupRoleBasedUI();
         
-        // Load broadcast data immediately using the passed data
-        loadBroadcastDataWithExtras(batteryLevel, firmwareVersion, currentTemperature);
+        // Start status refresh
+        startStatusRefresh();
+        
+        // Load data based on what's available
+        if (currentTemperature != Float.NaN) {
+            loadBroadcastDataWithExtras(batteryLevel, firmwareVersion, currentTemperature);
+        } else {
+            loadBroadcastData();
+        }
         
         // Show loader only for components that need connection data
         showLoaderForConnectionData();
@@ -113,12 +123,13 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         tvDeviceMac = findViewById(R.id.tv_device_mac);
         tvBatteryLevel = findViewById(R.id.tv_battery_level);
         tvFirmwareVersion = findViewById(R.id.tv_firmware_version);
-        tvConnectionStatus = findViewById(R.id.tv_connection_status);
+        tvExcursionEventAt = findViewById(R.id.tv_excursion_event_at);
         tvCurrentTemperature = findViewById(R.id.tv_current_temperature);
-        tvAvgTemperature = findViewById(R.id.tv_avg_temperature);
-        tvMaxTemperature = findViewById(R.id.tv_max_temperature);
-        tvMinTemperature = findViewById(R.id.tv_min_temperature);
-        tvExcursionCount = findViewById(R.id.tv_excursion_count);
+        tvCurrentStatus = findViewById(R.id.tv_current_status);
+        // tvAvgTemperature = findViewById(R.id.tv_avg_temperature);
+        // tvMaxTemperature = findViewById(R.id.tv_max_temperature);
+        // tvMinTemperature = findViewById(R.id.tv_min_temperature);
+        // tvExcursionCount = findViewById(R.id.tv_excursion_count);
         lineChart = findViewById(R.id.graph_container);
         tvGraphPlaceholder = findViewById(R.id.tv_graph_placeholder);
         loadingOverlay = findViewById(R.id.loading_overlay);
@@ -179,6 +190,59 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         }
     }
 
+    // Status update methods
+    private void updateStatus(String status) {
+        if (tvCurrentStatus != null) {
+            tvCurrentStatus.setText(status);
+            Log.d("DeviceDetails", "Status updated: " + status);
+        }
+    }
+
+    private void updateStatusFetching() {
+        updateStatus(getString(R.string.status_fetching));
+    }
+
+    private void updateStatusFetchCompleted() {
+        updateStatus(getString(R.string.status_fetch_completed));
+    }
+
+    private void updateStatusUploading() {
+        updateStatus(getString(R.string.status_uploading));
+    }
+
+    private void updateStatusCompleted() {
+        updateStatus(getString(R.string.status_completed));
+    }
+
+    private void updateStatusIdle() {
+        updateStatus(getString(R.string.status_idle));
+    }
+
+    private void refreshStatusFromProcessing() {
+        String currentStatus = ScanDevicesListActivity.getCurrentProcessingStatus();
+        if (currentStatus != null) {
+            switch (currentStatus) {
+                case "Fetching":
+                    updateStatusFetching();
+                    break;
+                case "Fetch Completed":
+                    updateStatusFetchCompleted();
+                    break;
+                case "Uploading":
+                    updateStatusUploading();
+                    break;
+                case "Completed":
+                    updateStatusCompleted();
+                    break;
+                default:
+                    updateStatusIdle();
+                    break;
+            }
+        } else {
+            updateStatusIdle();
+        }
+    }
+
     private void loadBroadcastDataWithExtras(int batteryLevel, String firmwareVersion, float currentTemperature) {
         Log.d("DeviceDetails", "=== LOADING BROADCAST DATA WITH EXTRAS ===");
         Log.d("DeviceDetails", "Device: " + (device != null ? device.getMacAddress() : "NULL"));
@@ -215,6 +279,7 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         // Set firmware version from extras (only visible to admin users)
         if (firmwareVersion != null && !firmwareVersion.isEmpty()) {
             tvFirmwareVersion.setText(firmwareVersion);
+            tvFirmwareVersion.setTextColor(getResources().getColor(R.color.text_primary));
             Log.d("DeviceDetails", "✅ Firmware version set from extras: " + firmwareVersion);
         } else {
             tvFirmwareVersion.setText("--");
@@ -239,10 +304,6 @@ public class DeviceDetailsActivity extends AppCompatActivity {
             tvCurrentTemperature.setTextColor(getResources().getColor(R.color.text_secondary));
             Log.w("DeviceDetails", "❌ No temperature data available");
         }
-        
-        // Set connection status
-        tvConnectionStatus.setText(getString(R.string.connected));
-        tvConnectionStatus.setTextColor(getResources().getColor(R.color.success));
         
         Log.d("DeviceDetails", "=== BROADCAST DATA LOADING COMPLETE ===");
     }
@@ -354,10 +415,6 @@ public class DeviceDetailsActivity extends AppCompatActivity {
             tvCurrentTemperature.setTextColor(getResources().getColor(R.color.text_secondary));
         }
         
-        // Set connection status
-        tvConnectionStatus.setText(getString(R.string.connected));
-        tvConnectionStatus.setTextColor(getResources().getColor(R.color.success));
-        
         Log.d("DeviceDetails", "=== BROADCAST DATA LOADING COMPLETE ===");
     }
     
@@ -373,10 +430,10 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         // }
         
         // Show placeholder text for statistics
-        tvAvgTemperature.setText("Loading...");
-        tvMaxTemperature.setText("Loading...");
-        tvMinTemperature.setText("Loading...");
-        tvExcursionCount.setText("Loading...");
+        // tvAvgTemperature.setText("Loading...");
+        // tvMaxTemperature.setText("Loading...");
+        // tvMinTemperature.setText("Loading...");
+        // tvExcursionCount.setText("Loading...");
     }
     
     private void loadConnectionDataAsync() {
@@ -431,10 +488,10 @@ public class DeviceDetailsActivity extends AppCompatActivity {
     
     private void showTimeoutMessage() {
         // Show timeout message when data loading takes too long
-        tvAvgTemperature.setText("--");
-        tvMinTemperature.setText("--");
-        tvMaxTemperature.setText("--");
-        tvExcursionCount.setText("--");
+        // tvAvgTemperature.setText("--");
+        // tvMinTemperature.setText("--");
+        // tvMaxTemperature.setText("--");
+        // tvExcursionCount.setText("--");
         
         // Show timeout message in graph area
         lineChart.setVisibility(View.GONE);
@@ -446,10 +503,10 @@ public class DeviceDetailsActivity extends AppCompatActivity {
     
     private void showNoDataMessage() {
         // Show error message when no data is available
-        tvAvgTemperature.setText("--");
-        tvMinTemperature.setText("--");
-        tvMaxTemperature.setText("--");
-        tvExcursionCount.setText("--");
+        // tvAvgTemperature.setText("--");
+        // tvMinTemperature.setText("--");
+        // tvMaxTemperature.setText("--");
+        // tvExcursionCount.setText("--");
         
         // Show error message in graph area
         lineChart.setVisibility(View.GONE);
@@ -466,19 +523,53 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         if (historicalData != null && !historicalData.isEmpty()) {
             // Convert HtData to our format
             timeLabels.clear();
+            originalTimestamps.clear();
             temperatureEntries.clear();
             alertUpperEntries.clear();
             alertLowerEntries.clear();
             
             for (int i = 0; i < historicalData.size(); i++) {
                 HtData htData = historicalData.get(i);
-                timeLabels.add(String.format("%02d:%02d", 
-                    new java.util.Date(htData.getTimestamps() * 1000).getHours(),
-                    new java.util.Date(htData.getTimestamps() * 1000).getMinutes()));
                 
+                // Handle timestamp conversion properly
+                long timestamp = htData.getTimestamps();
+                // Check if timestamp is in seconds (10 digits) or milliseconds (13 digits)
+                if (timestamp < 10000000000L) {
+                    // Timestamp is in seconds, convert to milliseconds
+                    timestamp = timestamp * 1000;
+                }
+                
+                java.util.Date date = new java.util.Date(timestamp);
+                java.text.SimpleDateFormat timeFormat = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault());
+                String timeLabel = timeFormat.format(date);
+                
+                timeLabels.add(timeLabel);
                 temperatureEntries.add(new Entry(i, htData.getTemperature()));
                 alertUpperEntries.add(new Entry(i, 8.0f));
                 alertLowerEntries.add(new Entry(i, 2.0f));
+                originalTimestamps.add(timestamp); // Store original timestamp
+            }
+            
+            // Update excursion event timestamp (first excursion event timestamp)
+            if (excursionData != null && !excursionData.isEmpty()) {
+                // Get the first excursion event timestamp
+                long firstExcursionTimestamp = excursionData.get(0).getTimestamp();
+                
+                // Handle timestamp conversion properly
+                if (firstExcursionTimestamp < 10000000000L) {
+                    // Timestamp is in seconds, convert to milliseconds
+                    firstExcursionTimestamp = firstExcursionTimestamp * 1000;
+                }
+                
+                java.util.Date firstExcursionDate = new java.util.Date(firstExcursionTimestamp);
+                java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault());
+                String formattedDate = dateFormat.format(firstExcursionDate);
+                
+                tvExcursionEventAt.setText(formattedDate);
+                Log.d("DeviceDetails", "Excursion event at: " + formattedDate + " (timestamp: " + firstExcursionTimestamp + ")");
+            }  else {
+                tvExcursionEventAt.setText("No data");
+                Log.d("DeviceDetails", "No excursion or historical data available");
             }
             
             updateStatisticsFromProcessedData(historicalData, excursionData);
@@ -508,28 +599,28 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         float avg = sum / historicalData.size();
         int excursionCount = excursionData != null ? excursionData.size() : 0;
         
-        tvAvgTemperature.setText(String.format("%.1f°C", avg));
-        tvMinTemperature.setText(String.format("%.1f°C", min));
-        tvMaxTemperature.setText(String.format("%.1f°C", max));
-        tvExcursionCount.setText(String.valueOf(excursionCount));
+        // tvAvgTemperature.setText(String.format("%.1f°C", avg));
+        // tvMinTemperature.setText(String.format("%.1f°C", min));
+        // tvMaxTemperature.setText(String.format("%.1f°C", max));
+        // tvExcursionCount.setText(String.valueOf(excursionCount));
         
         // Color code max temperature using updated thresholds (2-8°C)
-        if (max > 8.0f) {
-            tvMaxTemperature.setTextColor(getResources().getColor(R.color.error));
-        } else if (max > 6.0f) {
-            tvMaxTemperature.setTextColor(getResources().getColor(R.color.warning));
-        } else {
-            tvMaxTemperature.setTextColor(getResources().getColor(R.color.success));
-        }
+        // if (max > 8.0f) {
+        //     tvMaxTemperature.setTextColor(getResources().getColor(R.color.error));
+        // } else if (max > 6.0f) {
+        //     tvMaxTemperature.setTextColor(getResources().getColor(R.color.warning));
+        // } else {
+        //     tvMaxTemperature.setTextColor(getResources().getColor(R.color.success));
+        // }
         
-        // Color code min temperature using updated thresholds (2-8°C)
-        if (min < 2.0f) {
-            tvMinTemperature.setTextColor(getResources().getColor(R.color.error));
-        } else if (min < 3.0f) {
-            tvMinTemperature.setTextColor(getResources().getColor(R.color.warning));
-        } else {
-            tvMinTemperature.setTextColor(getResources().getColor(R.color.success));
-        }
+        // // Color code min temperature using updated thresholds (2-8°C)
+        // if (min < 2.0f) {
+        //     tvMinTemperature.setTextColor(getResources().getColor(R.color.error));
+        // } else if (min < 3.0f) {
+        //     tvMinTemperature.setTextColor(getResources().getColor(R.color.warning));
+        // } else {
+        //     tvMinTemperature.setTextColor(getResources().getColor(R.color.success));
+        // }
         
         Log.d("DeviceDetails", "Statistics updated - Avg: " + avg + "°C, Min: " + min + "°C, Max: " + max + "°C, Excursions: " + excursionCount);
     }
@@ -549,6 +640,7 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         lineChart.setMarker(new com.github.mikephil.charting.components.MarkerView(this, R.layout.marker_view) {
             @Override
             public void refreshContent(Entry e, Highlight highlight) {
+                TextView tvDate = findViewById(R.id.tv_marker_date);
                 TextView tvTime = findViewById(R.id.tv_marker_time);
                 TextView tvTemperature = findViewById(R.id.tv_marker_temperature);
                 TextView tvStatus = findViewById(R.id.tv_marker_status);
@@ -556,9 +648,22 @@ public class DeviceDetailsActivity extends AppCompatActivity {
                 int index = (int) e.getX();
                 float temperature = e.getY();
                 
-                if (index >= 0 && index < timeLabels.size()) {
-                    tvTime.setText("Time: " + timeLabels.get(index));
+                if (index >= 0 && index < timeLabels.size() && index < originalTimestamps.size()) {
+                    // Get original timestamp
+                    long timestamp = originalTimestamps.get(index);
+                    
+                    // Convert timestamp to date and time
+                    java.util.Date date = new java.util.Date(timestamp);
+                    java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault());
+                    java.text.SimpleDateFormat timeFormat = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault());
+                    
+                    String dateStr = dateFormat.format(date);
+                    String timeStr = timeFormat.format(date);
+                    
+                    tvDate.setText("Date: " + dateStr);
+                    tvTime.setText("Time: " + timeStr);
                 } else {
+                    tvDate.setText("Date: --");
                     tvTime.setText("Time: --");
                 }
                 
@@ -580,11 +685,11 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         // X Axis
         XAxis xAxis = lineChart.getXAxis();
         xAxis.setPosition(XAxis.XAxisPosition.BOTTOM);
-        xAxis.setDrawGridLines(false);
-        xAxis.setGranularity(1f);
+        xAxis.setDrawGridLines(true);
         xAxis.setDrawAxisLine(true);
         xAxis.setTextColor(getResources().getColor(R.color.text_primary));
-        xAxis.setTextSize(12f);
+        xAxis.setTextSize(10f);
+        
         xAxis.setValueFormatter(new ValueFormatter() {
             @Override
             public String getFormattedValue(float value) {
@@ -613,12 +718,8 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         YAxis rightAxis = lineChart.getAxisRight();
         rightAxis.setEnabled(false);
         
-        // Legend - Enable to show what each line represents
-        lineChart.getLegend().setEnabled(true);
-        lineChart.getLegend().setTextColor(getResources().getColor(R.color.text_primary));
-        lineChart.getLegend().setTextSize(12f);
-        lineChart.getLegend().setVerticalAlignment(com.github.mikephil.charting.components.Legend.LegendVerticalAlignment.TOP);
-        lineChart.getLegend().setHorizontalAlignment(com.github.mikephil.charting.components.Legend.LegendHorizontalAlignment.CENTER);
+        // Legend - Disable since we have custom legends below the graph
+        lineChart.getLegend().setEnabled(false);
         
         // Enable highlighting for better touch interaction
         lineChart.setHighlightPerDragEnabled(true);
@@ -636,6 +737,7 @@ public class DeviceDetailsActivity extends AppCompatActivity {
     }
 
     private List<String> timeLabels = new ArrayList<>();
+    private List<Long> originalTimestamps = new ArrayList<>(); // Store original timestamps for date conversion
     private List<Entry> temperatureEntries = new ArrayList<>();
     private List<Entry> alertUpperEntries = new ArrayList<>();
     private List<Entry> alertLowerEntries = new ArrayList<>();
@@ -650,7 +752,8 @@ public class DeviceDetailsActivity extends AppCompatActivity {
                 showNoDataMessage();
                 return;
             }
-        
+            findViewById(R.id.tv_y_axis_title).setVisibility(View.VISIBLE);
+            findViewById(R.id.tv_x_axis_title).setVisibility(View.VISIBLE);
         // Calculate min and max for dynamic scaling
         float minTemp = Float.MAX_VALUE;
         float maxTemp = Float.MIN_VALUE;
@@ -659,10 +762,14 @@ public class DeviceDetailsActivity extends AppCompatActivity {
             maxTemp = Math.max(maxTemp, entry.getY());
         }
         
+        // Ensure threshold lines are always visible
+        float yMin = Math.min(minTemp, 2.0f); // Start from lowest temp or 2°C, whichever is lower
+        float yMax = Math.max(maxTemp, 8.0f); // End at highest temp or 8°C, whichever is higher
+        
         // Add padding to the range
-        float padding = Math.max(1.0f, (maxTemp - minTemp) * 0.1f);
-        float yMin = minTemp - padding;
-        float yMax = maxTemp + padding;
+        float padding = Math.max(0.5f, (yMax - yMin) * 0.1f);
+        yMin = yMin - padding;
+        yMax = yMax + padding;
         
         // Update Y-axis range for dynamic scaling
         YAxis leftAxis = lineChart.getAxisLeft();
@@ -670,7 +777,7 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         leftAxis.setAxisMaximum(yMax);
         
         // Create temperature data set
-        LineDataSet temperatureDataSet = new LineDataSet(temperatureEntries, "Temperature");
+        LineDataSet temperatureDataSet = new LineDataSet(temperatureEntries, "Temperature (°C)");
         temperatureDataSet.setColor(getResources().getColor(R.color.primary));
         temperatureDataSet.setLineWidth(2f);
         temperatureDataSet.setCircleColor(getResources().getColor(R.color.primary));
@@ -680,7 +787,7 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         temperatureDataSet.setDrawValues(false);
         
         // Create upper alert line
-        LineDataSet upperAlertDataSet = new LineDataSet(alertUpperEntries, "Upper Alert (8°C)");
+        LineDataSet upperAlertDataSet = new LineDataSet(alertUpperEntries, "High Threshold (8°C)");
         upperAlertDataSet.setColor(getResources().getColor(R.color.error));
         upperAlertDataSet.setLineWidth(1f);
         upperAlertDataSet.setDrawCircles(false);
@@ -689,8 +796,8 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         upperAlertDataSet.enableDashedLine(10f, 5f, 0f);
         
         // Create lower alert line
-        LineDataSet lowerAlertDataSet = new LineDataSet(alertLowerEntries, "Lower Alert (2°C)");
-        lowerAlertDataSet.setColor(getResources().getColor(R.color.error));
+        LineDataSet lowerAlertDataSet = new LineDataSet(alertLowerEntries, "Low Threshold (2°C)");
+        lowerAlertDataSet.setColor(getResources().getColor(R.color.blue));
         lowerAlertDataSet.setLineWidth(1f);
         lowerAlertDataSet.setDrawCircles(false);
         lowerAlertDataSet.setDrawValues(false);
@@ -707,9 +814,38 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         // Show chart and hide placeholder
         lineChart.setVisibility(View.VISIBLE);
         tvGraphPlaceholder.setVisibility(View.GONE);
+
+        // Set appropriate number of labels based on data size
+        if (timeLabels.size() > 20) {
+            lineChart.getXAxis().setLabelCount(10, true); // Show 10 labels for large datasets
+        } else if (timeLabels.size() > 10) {
+            lineChart.getXAxis().setLabelCount(5, true);  // Show 5 labels for medium datasets
+        } else {
+            lineChart.getXAxis().setLabelCount(timeLabels.size(), true); // Show all labels for small datasets
+        }
         } catch (Exception e) {
             Log.e("DeviceDetails", "Error updating chart: " + e.getMessage(), e);
             showNoDataMessage();
         }
+    }
+
+    private void startStatusRefresh() {
+        statusRefreshHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                refreshStatusFromProcessing();
+                statusRefreshHandler.postDelayed(this, STATUS_REFRESH_INTERVAL);
+            }
+        }, STATUS_REFRESH_INTERVAL);
+    }
+
+    private void stopStatusRefresh() {
+        statusRefreshHandler.removeCallbacksAndMessages(null);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        stopStatusRefresh();
     }
 } 
