@@ -38,7 +38,9 @@ public class BackgroundScanService extends Service {
     
     // Scan cycle: 6 seconds scan + 6 seconds wait
     private static final int SCAN_DURATION = 6 * 1000; // 6 seconds
+    private static final int INITIAL_SCAN_DURATION = 20 * 1000; // 20 seconds for initial scan
     private static final int WAIT_DURATION = 6 * 1000; // 6 seconds wait
+    private boolean isInitialScan = true; // Track if this is the first scan
     
     public void pauseScanning() {
         Log.d(TAG, "Pausing background scanning");
@@ -188,11 +190,15 @@ public class BackgroundScanService extends Service {
             return;
         }
         
+        // Use longer duration for initial scan to improve device discovery
+        int scanDuration = isInitialScan ? INITIAL_SCAN_DURATION : SCAN_DURATION;
+        Log.d(TAG, "Starting background BLE scan with duration: " + (scanDuration/1000) + "s (initial: " + isInitialScan + ")");
+        
         try {
             isScanning = true;
             Log.d(TAG, "Starting background BLE scan...");
             
-            mBleManager.startScan(this, SCAN_DURATION, new OnScanDevicesResultListener<MST03Entity>() {
+            mBleManager.startScan(this, scanDuration, new OnScanDevicesResultListener<MST03Entity>() {
                 @Override
                 public void onScanResult(List<MST03Entity> list) {
                     Log.d(TAG, "Background scan result: " + list.size() + " devices found");
@@ -225,13 +231,11 @@ public class BackgroundScanService extends Service {
                             com.minew.ble.mst03.frames.CombinationFrame comboFrame = 
                                 (com.minew.ble.mst03.frames.CombinationFrame) mst03Entity.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
                             if (comboFrame != null) {
-                                
-                                
-                                
-                                
-                                
+                                Log.d(TAG, "[CombinationFrame] Available for " + mst03Entity.getMacAddress() + 
+                                      " - Temp: " + comboFrame.getTemperature() + "°C");
                             } else {
-                                
+                                Log.d(TAG, "[CombinationFrame] Missing for " + mst03Entity.getMacAddress() + 
+                                      " - Temperature data not yet available");
                             }
                             
                             
@@ -307,6 +311,12 @@ public class BackgroundScanService extends Service {
                 public void onStopScan(List<MST03Entity> list) {
                     Log.d(TAG, "Background scan stopped");
                     isScanning = false;
+                    
+                    // Mark initial scan as complete after first scan
+                    if (isInitialScan) {
+                        isInitialScan = false;
+                        Log.d(TAG, "Initial scan completed, switching to normal 6s scan cycle");
+                    }
                     
                     // Schedule next scan after wait period only if not paused
                     if (!isPaused) {

@@ -56,7 +56,6 @@ public class DeviceDetailsActivity extends AppCompatActivity {
     private View loadingOverlay;
     // private TextView tvLoadingText;
     private View firmwareContainer;
-    private ImageView ivUpgradeFirmware;
     private android.os.Handler statusRefreshHandler = new android.os.Handler();
     private static final int STATUS_REFRESH_INTERVAL = 1000; // 1 second
 
@@ -125,7 +124,7 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         tvFirmwareVersion = findViewById(R.id.tv_firmware_version);
         tvExcursionEventAt = findViewById(R.id.tv_excursion_event_at);
         tvCurrentTemperature = findViewById(R.id.tv_current_temperature);
-        tvCurrentStatus = findViewById(R.id.tv_current_status);
+        // tvCurrentStatus = findViewById(R.id.tv_current_status);
         // tvAvgTemperature = findViewById(R.id.tv_avg_temperature);
         // tvMaxTemperature = findViewById(R.id.tv_max_temperature);
         // tvMinTemperature = findViewById(R.id.tv_min_temperature);
@@ -135,7 +134,6 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         loadingOverlay = findViewById(R.id.loading_overlay);
         // tvLoadingText = findViewById(R.id.tv_loading_text);
         firmwareContainer = findViewById(R.id.firmware_container);
-        ivUpgradeFirmware = findViewById(R.id.iv_upgrade_firmware);
     }
 
     private void setupBackButton() {
@@ -154,28 +152,13 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         
         if (isAdmin) {
             // Show firmware container and upgrade button for admin
-            firmwareContainer.setVisibility(View.VISIBLE);
-            if (ivUpgradeFirmware != null) {
-                ivUpgradeFirmware.setVisibility(View.VISIBLE);
-                ivUpgradeFirmware.setOnClickListener(v -> handleFirmwareUpgrade());
-            }
-            
+            firmwareContainer.setVisibility(View.VISIBLE);    
             Log.d("DeviceDetails", "User is admin - showing firmware controls");
         } else {
             // Hide firmware container for regular users
             firmwareContainer.setVisibility(View.GONE);
-            if (ivUpgradeFirmware != null) {
-                ivUpgradeFirmware.setVisibility(View.GONE);
-                ivUpgradeFirmware.setOnClickListener(null);
-            }
             Log.d("DeviceDetails", "User is not admin - hiding firmware controls. Role: " + userRole);
         }
-    }
-    
-    private void handleFirmwareUpgrade() {
-        // TODO: Implement firmware upgrade logic
-        Toast.makeText(this, "Firmware upgrade functionality coming soon!", Toast.LENGTH_SHORT).show();
-        Log.d("DeviceDetails", "Firmware upgrade button clicked");
     }
     
     private void showLoader() {
@@ -190,58 +173,6 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         }
     }
 
-    // Status update methods
-    private void updateStatus(String status) {
-        if (tvCurrentStatus != null) {
-            tvCurrentStatus.setText(status);
-            Log.d("DeviceDetails", "Status updated: " + status);
-        }
-    }
-
-    private void updateStatusFetching() {
-        updateStatus(getString(R.string.status_fetching));
-    }
-
-    private void updateStatusFetchCompleted() {
-        updateStatus(getString(R.string.status_fetch_completed));
-    }
-
-    private void updateStatusUploading() {
-        updateStatus(getString(R.string.status_uploading));
-    }
-
-    private void updateStatusCompleted() {
-        updateStatus(getString(R.string.status_completed));
-    }
-
-    private void updateStatusIdle() {
-        updateStatus(getString(R.string.status_idle));
-    }
-
-    private void refreshStatusFromProcessing() {
-        String currentStatus = ScanDevicesListActivity.getCurrentProcessingStatus();
-        if (currentStatus != null) {
-            switch (currentStatus) {
-                case "Fetching":
-                    updateStatusFetching();
-                    break;
-                case "Fetch Completed":
-                    updateStatusFetchCompleted();
-                    break;
-                case "Uploading":
-                    updateStatusUploading();
-                    break;
-                case "Completed":
-                    updateStatusCompleted();
-                    break;
-                default:
-                    updateStatusIdle();
-                    break;
-            }
-        } else {
-            updateStatusIdle();
-        }
-    }
 
     private void loadBroadcastDataWithExtras(int batteryLevel, String firmwareVersion, float currentTemperature) {
         Log.d("DeviceDetails", "=== LOADING BROADCAST DATA WITH EXTRAS ===");
@@ -252,10 +183,10 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         
         // Set MAC address (available from broadcast)
         if (device != null && device.getMacAddress() != null) {
-            tvDeviceMac.setText("MAC: " + device.getMacAddress());
+            tvDeviceMac.setText(device.getMacAddress());
             Log.d("DeviceDetails", "MAC address set: " + device.getMacAddress());
         } else {
-            tvDeviceMac.setText("MAC: Unknown");
+            tvDeviceMac.setText("Unknown");
             Log.w("DeviceDetails", "No MAC address available");
         }
         
@@ -314,10 +245,10 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         
         // Set MAC address (available from broadcast)
         if (device != null && device.getMacAddress() != null) {
-            tvDeviceMac.setText("MAC: " + device.getMacAddress());
+            tvDeviceMac.setText(device.getMacAddress());
             Log.d("DeviceDetails", "MAC address set: " + device.getMacAddress());
         } else {
-            tvDeviceMac.setText("MAC: Unknown");
+            tvDeviceMac.setText("Unknown");
             Log.w("DeviceDetails", "No MAC address available");
         }
         
@@ -521,21 +452,46 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         List<ExcursionData> excursionData = ScanDevicesListActivity.getProcessedExcursionData();
         
         if (historicalData != null && !historicalData.isEmpty()) {
-            // Convert HtData to our format
+            // Clear previous data
             timeLabels.clear();
             originalTimestamps.clear();
             temperatureEntries.clear();
             alertUpperEntries.clear();
             alertLowerEntries.clear();
             
+            // Find the 3 key points: start, excursion start, and end
+            int startIndex = 0;
+            int excursionStartIndex = -1;
+            int endIndex = historicalData.size() - 1;
+            
+            // Find the first excursion point
             for (int i = 0; i < historicalData.size(); i++) {
                 HtData htData = historicalData.get(i);
+                float temperature = htData.getTemperature();
+                if (temperature < 2.0f || temperature > 8.0f) {
+                    excursionStartIndex = i;
+                    break;
+                }
+            }
+            
+            // Create only 3 key points
+            List<Integer> keyIndices = new ArrayList<>();
+            keyIndices.add(startIndex); // Starting point
+            
+            if (excursionStartIndex != -1) {
+                keyIndices.add(excursionStartIndex); // Excursion start point
+            }
+            
+            keyIndices.add(endIndex); // End point
+            
+            // Create data for only the key points
+            for (int i = 0; i < keyIndices.size(); i++) {
+                int dataIndex = keyIndices.get(i);
+                HtData htData = historicalData.get(dataIndex);
                 
                 // Handle timestamp conversion properly
                 long timestamp = htData.getTimestamps();
-                // Check if timestamp is in seconds (10 digits) or milliseconds (13 digits)
                 if (timestamp < 10000000000L) {
-                    // Timestamp is in seconds, convert to milliseconds
                     timestamp = timestamp * 1000;
                 }
                 
@@ -547,34 +503,53 @@ public class DeviceDetailsActivity extends AppCompatActivity {
                 temperatureEntries.add(new Entry(i, htData.getTemperature()));
                 alertUpperEntries.add(new Entry(i, 8.0f));
                 alertLowerEntries.add(new Entry(i, 2.0f));
-                originalTimestamps.add(timestamp); // Store original timestamp
+                originalTimestamps.add(timestamp);
             }
             
             // Update excursion event timestamp (first excursion event timestamp)
             if (excursionData != null && !excursionData.isEmpty()) {
-                // Get the first excursion event timestamp
-                long firstExcursionTimestamp = excursionData.get(0).getTimestamp();
+                // Find the first excursion timestamp from historical data
+                long firstExcursionTimestamp = -1;
                 
-                // Handle timestamp conversion properly
-                if (firstExcursionTimestamp < 10000000000L) {
-                    // Timestamp is in seconds, convert to milliseconds
-                    firstExcursionTimestamp = firstExcursionTimestamp * 1000;
+                // Search through historical data to find the first excursion
+                for (HtData htData : historicalData) {
+                    float temperature = htData.getTemperature();
+                    if (temperature < 2.0f || temperature > 8.0f) {
+                        firstExcursionTimestamp = htData.getTimestamps();
+                        break;
+                    }
                 }
                 
-                java.util.Date firstExcursionDate = new java.util.Date(firstExcursionTimestamp);
-                java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault());
-                String formattedDate = dateFormat.format(firstExcursionDate);
+                // If we found an excursion in historical data, use it; otherwise use the first excursion from excursionData
+                if (firstExcursionTimestamp == -1 && !excursionData.isEmpty()) {
+                    firstExcursionTimestamp = excursionData.get(0).getTimestamp();
+                }
                 
-                tvExcursionEventAt.setText(formattedDate);
-                Log.d("DeviceDetails", "Excursion event at: " + formattedDate + " (timestamp: " + firstExcursionTimestamp + ")");
-            }  else {
+                if (firstExcursionTimestamp != -1) {
+                    // Handle timestamp conversion properly
+                    if (firstExcursionTimestamp < 10000000000L) {
+                        // Timestamp is in seconds, convert to milliseconds
+                        firstExcursionTimestamp = firstExcursionTimestamp * 1000;
+                    }
+                    
+                    java.util.Date firstExcursionDate = new java.util.Date(firstExcursionTimestamp);
+                    java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("MM/dd/yyyy HH:mm", java.util.Locale.getDefault());
+                    String formattedDate = dateFormat.format(firstExcursionDate);
+                    
+                    tvExcursionEventAt.setText(formattedDate);
+                    Log.d("DeviceDetails", "Excursion event at: " + formattedDate + " (timestamp: " + firstExcursionTimestamp + ")");
+                } else {
+                    tvExcursionEventAt.setText("No excursion data");
+                    Log.d("DeviceDetails", "No excursion timestamp found");
+                }
+            } else {
                 tvExcursionEventAt.setText("No data");
                 Log.d("DeviceDetails", "No excursion or historical data available");
             }
             
             updateStatisticsFromProcessedData(historicalData, excursionData);
             updateGraph();
-            Log.d("DeviceDetails", "Loaded " + historicalData.size() + " real historical records from device");
+            Log.d("DeviceDetails", "Loaded " + keyIndices.size() + " key points for graph from " + historicalData.size() + " total records");
         } else {
             // Show no data message instead of fallback
             showNoDataMessage();
@@ -754,75 +729,93 @@ public class DeviceDetailsActivity extends AppCompatActivity {
             }
             findViewById(R.id.tv_y_axis_title).setVisibility(View.VISIBLE);
             findViewById(R.id.tv_x_axis_title).setVisibility(View.VISIBLE);
-        // Calculate min and max for dynamic scaling
-        float minTemp = Float.MAX_VALUE;
-        float maxTemp = Float.MIN_VALUE;
-        for (Entry entry : temperatureEntries) {
-            minTemp = Math.min(minTemp, entry.getY());
-            maxTemp = Math.max(maxTemp, entry.getY());
-        }
-        
-        // Ensure threshold lines are always visible
-        float yMin = Math.min(minTemp, 2.0f); // Start from lowest temp or 2°C, whichever is lower
-        float yMax = Math.max(maxTemp, 8.0f); // End at highest temp or 8°C, whichever is higher
-        
-        // Add padding to the range
-        float padding = Math.max(0.5f, (yMax - yMin) * 0.1f);
-        yMin = yMin - padding;
-        yMax = yMax + padding;
-        
-        // Update Y-axis range for dynamic scaling
-        YAxis leftAxis = lineChart.getAxisLeft();
-        leftAxis.setAxisMinimum(yMin);
-        leftAxis.setAxisMaximum(yMax);
-        
-        // Create temperature data set
-        LineDataSet temperatureDataSet = new LineDataSet(temperatureEntries, "Temperature (°C)");
-        temperatureDataSet.setColor(getResources().getColor(R.color.primary));
-        temperatureDataSet.setLineWidth(2f);
-        temperatureDataSet.setCircleColor(getResources().getColor(R.color.primary));
-        temperatureDataSet.setCircleRadius(3f);
-        temperatureDataSet.setDrawCircleHole(false);
-        temperatureDataSet.setMode(LineDataSet.Mode.CUBIC_BEZIER);
-        temperatureDataSet.setDrawValues(false);
-        
-        // Create upper alert line
-        LineDataSet upperAlertDataSet = new LineDataSet(alertUpperEntries, "High Threshold (8°C)");
-        upperAlertDataSet.setColor(getResources().getColor(R.color.error));
-        upperAlertDataSet.setLineWidth(1f);
-        upperAlertDataSet.setDrawCircles(false);
-        upperAlertDataSet.setDrawValues(false);
-        upperAlertDataSet.setMode(LineDataSet.Mode.LINEAR);
-        upperAlertDataSet.enableDashedLine(10f, 5f, 0f);
-        
-        // Create lower alert line
-        LineDataSet lowerAlertDataSet = new LineDataSet(alertLowerEntries, "Low Threshold (2°C)");
-        lowerAlertDataSet.setColor(getResources().getColor(R.color.blue));
-        lowerAlertDataSet.setLineWidth(1f);
-        lowerAlertDataSet.setDrawCircles(false);
-        lowerAlertDataSet.setDrawValues(false);
-        lowerAlertDataSet.setMode(LineDataSet.Mode.LINEAR);
-        lowerAlertDataSet.enableDashedLine(10f, 5f, 0f);
-        
-        // Combine data sets
-        LineData lineData = new LineData(temperatureDataSet, upperAlertDataSet, lowerAlertDataSet);
-        lineChart.setData(lineData);
-        
-        // Update chart
-        lineChart.invalidate();
-        
-        // Show chart and hide placeholder
-        lineChart.setVisibility(View.VISIBLE);
-        tvGraphPlaceholder.setVisibility(View.GONE);
+            
+            // Calculate min and max for dynamic scaling
+            float minTemp = Float.MAX_VALUE;
+            float maxTemp = Float.MIN_VALUE;
+            for (Entry entry : temperatureEntries) {
+                minTemp = Math.min(minTemp, entry.getY());
+                maxTemp = Math.max(maxTemp, entry.getY());
+            }
+            
+            // Ensure threshold lines are always visible
+            float yMin = Math.min(minTemp, 2.0f); // Start from lowest temp or 2°C, whichever is lower
+            float yMax = Math.max(maxTemp, 8.0f); // End at highest temp or 8°C, whichever is higher
+            
+            // Add padding to the range
+            float padding = Math.max(0.5f, (yMax - yMin) * 0.1f);
+            yMin = yMin - padding;
+            yMax = yMax + padding;
+            
+            // Update Y-axis range for dynamic scaling
+            YAxis leftAxis = lineChart.getAxisLeft();
+            leftAxis.setAxisMinimum(yMin);
+            leftAxis.setAxisMaximum(yMax);
+            
+            // Create temperature data set with custom colors for key points
+            LineDataSet temperatureDataSet = new LineDataSet(temperatureEntries, "Temperature (°C)");
+            temperatureDataSet.setColor(getResources().getColor(R.color.primary));
+            temperatureDataSet.setLineWidth(2f);
+            temperatureDataSet.setMode(LineDataSet.Mode.LINEAR);
+            temperatureDataSet.setDrawValues(false);
+            
+            // Set custom colors for the 3 key points
+            List<Integer> circleColors = new ArrayList<>();
+            List<Float> circleRadius = new ArrayList<>();
+            
+            for (int i = 0; i < temperatureEntries.size(); i++) {
+                if (i == 0) {
+                    // Starting point - Green
+                    circleColors.add(getResources().getColor(R.color.success));
+                    circleRadius.add(6f);
+                } else if (i == 1 && temperatureEntries.size() == 3) {
+                    // Excursion start point - Dark Red
+                    circleColors.add(getResources().getColor(R.color.error));
+                    circleRadius.add(6f);
+                } else {
+                    // End point - Normal color
+                    circleColors.add(getResources().getColor(R.color.primary));
+                    circleRadius.add(6f);
+                }
+            }
+            
+            temperatureDataSet.setCircleColors(circleColors);
+            temperatureDataSet.setCircleRadius(6f);
+            temperatureDataSet.setDrawCircleHole(false);
+            temperatureDataSet.setDrawCircles(true);
+            
+            // Create upper alert line
+            LineDataSet upperAlertDataSet = new LineDataSet(alertUpperEntries, "High Threshold (8°C)");
+            upperAlertDataSet.setColor(getResources().getColor(R.color.error));
+            upperAlertDataSet.setLineWidth(1f);
+            upperAlertDataSet.setDrawCircles(false);
+            upperAlertDataSet.setDrawValues(false);
+            upperAlertDataSet.setMode(LineDataSet.Mode.LINEAR);
+            upperAlertDataSet.enableDashedLine(10f, 5f, 0f);
+            
+            // Create lower alert line
+            LineDataSet lowerAlertDataSet = new LineDataSet(alertLowerEntries, "Low Threshold (2°C)");
+            lowerAlertDataSet.setColor(getResources().getColor(R.color.blue));
+            lowerAlertDataSet.setLineWidth(1f);
+            lowerAlertDataSet.setDrawCircles(false);
+            lowerAlertDataSet.setDrawValues(false);
+            lowerAlertDataSet.setMode(LineDataSet.Mode.LINEAR);
+            lowerAlertDataSet.enableDashedLine(10f, 5f, 0f);
+            
+            // Combine data sets
+            LineData lineData = new LineData(temperatureDataSet, upperAlertDataSet, lowerAlertDataSet);
+            lineChart.setData(lineData);
+            
+            // Update chart
+            lineChart.invalidate();
+            
+            // Show chart and hide placeholder
+            lineChart.setVisibility(View.VISIBLE);
+            tvGraphPlaceholder.setVisibility(View.GONE);
 
-        // Set appropriate number of labels based on data size
-        if (timeLabels.size() > 20) {
-            lineChart.getXAxis().setLabelCount(10, true); // Show 10 labels for large datasets
-        } else if (timeLabels.size() > 10) {
-            lineChart.getXAxis().setLabelCount(5, true);  // Show 5 labels for medium datasets
-        } else {
-            lineChart.getXAxis().setLabelCount(timeLabels.size(), true); // Show all labels for small datasets
-        }
+            // Set appropriate number of labels based on data size (now always 3 points)
+            lineChart.getXAxis().setLabelCount(temperatureEntries.size(), true);
+            
         } catch (Exception e) {
             Log.e("DeviceDetails", "Error updating chart: " + e.getMessage(), e);
             showNoDataMessage();
@@ -833,7 +826,6 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         statusRefreshHandler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                refreshStatusFromProcessing();
                 statusRefreshHandler.postDelayed(this, STATUS_REFRESH_INTERVAL);
             }
         }, STATUS_REFRESH_INTERVAL);

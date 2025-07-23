@@ -68,4 +68,16 @@
         <item name="android:paddingBottom">4dp</item>
         <item name="android:minHeight">24dp</item>
     </style>
+    
+    <!-- Consistent text style for app-wide use -->
+    <style name="AppTextStyle" parent="TextAppearance.MaterialComponents.Body1">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    
+    <!-- Style for input fields (normal weight) -->
+    <style name="AppInputStyle" parent="TextAppearance.MaterialComponents.Body1">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">normal</item>
+    </style>
 </resources>

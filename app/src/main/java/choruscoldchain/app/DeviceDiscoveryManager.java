@@ -46,6 +46,16 @@ public class DeviceDiscoveryManager {
         
         // Update the discovered devices list
         for (MST03Entity newDevice : newDevices) {
+            // Log CombinationFrame availability for debugging
+            com.minew.ble.mst03.frames.CombinationFrame comboFrame = 
+                (com.minew.ble.mst03.frames.CombinationFrame) newDevice.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
+            if (comboFrame != null) {
+                Log.d(TAG, "[FrameLog] CombinationFrame available for " + newDevice.getMacAddress() + 
+                      " - Temp: " + comboFrame.getTemperature() + "°C");
+            } else {
+                Log.d(TAG, "[FrameLog] CombinationFrame not yet available for " + newDevice.getMacAddress());
+            }
+            
             boolean found = false;
             for (int i = 0; i < discoveredDevices.size(); i++) {
                 MST03Entity existingDevice = discoveredDevices.get(i);

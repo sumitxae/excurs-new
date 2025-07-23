@@ -31,8 +31,8 @@
 
                 <ImageView
                     android:id="@+id/ivChorusLogo"
-                    android:layout_width="120dp"
-                    android:layout_height="40dp"
+                    android:layout_width="180dp"
+                    android:layout_height="70dp"
                     android:src="@drawable/ic_chorus_logo"
                     android:layout_marginTop="50dp"
                     android:layout_marginBottom="60dp"
@@ -54,7 +54,6 @@
                     android:text="Verification"
                     android:textSize="42sp"
                     android:textColor="#000000"
-                    android:fontFamily="sans-serif"
                     android:textStyle="bold"
                     android:layout_gravity="start"
                     android:layout_marginBottom="0dp" />
@@ -65,7 +64,6 @@
                     android:text="Code!"
                     android:textSize="42sp"
                     android:textColor="#000000"
-                    android:fontFamily="sans-serif"
                     android:textStyle="bold"
                     android:layout_gravity="start"
                     android:layout_marginBottom="0dp" />
@@ -86,7 +84,6 @@
                     android:text="We have sent an OTP to your registered email,"
                     android:textSize="15sp"
                     android:textColor="#000000"
-                    android:fontFamily="sans-serif"
                     android:layout_gravity="start" />
 
                 <TextView
@@ -95,7 +92,6 @@
                     android:text="Please enter OTP here"
                     android:textSize="15sp"
                     android:textColor="#000000"
-                    android:fontFamily="sans-serif"
                     android:layout_gravity="start" />
 
             </LinearLayout>
@@ -118,7 +114,6 @@
                     android:textSize="20sp"
                     android:textColor="#000000"
                     android:background="#F9F9F9"
-                    android:fontFamily="sans-serif"
                     android:gravity="center"
                     android:paddingHorizontal="5dp"
                     android:textCursorDrawable="@color/primary" />
@@ -133,7 +128,6 @@
                     android:textSize="20sp"
                     android:textColor="#000000"
                     android:background="#F9F9F9"
-                    android:fontFamily="sans-serif"
                     android:gravity="center"
                     android:paddingHorizontal="5dp"
                     android:textCursorDrawable="@color/primary" />
@@ -148,7 +142,6 @@
                     android:textSize="20sp"
                     android:textColor="#000000"
                     android:background="#F9F9F9"
-                    android:fontFamily="sans-serif"
                     android:gravity="center"
                     android:paddingHorizontal="5dp"
                     android:textCursorDrawable="@color/primary" />
@@ -162,7 +155,6 @@
                     android:textSize="20sp"
                     android:textColor="#000000"
                     android:background="#F9F9F9"
-                    android:fontFamily="sans-serif"
                     android:gravity="center"
                     android:paddingHorizontal="5dp"
                     android:textCursorDrawable="@color/primary" />
@@ -184,12 +176,11 @@
                     android:text="Resend OTP"
                     android:textSize="18sp"
                     android:textColor="#000000"
-                    android:fontFamily="sans-serif"
+                    android:textStyle="normal"
                     android:background="?android:attr/selectableItemBackground"
                     android:padding="10dp"
                     android:clickable="true"
-                    android:focusable="true"
-                    android:textStyle="normal" />
+                    android:focusable="true" />
 
             </LinearLayout>
 
@@ -201,8 +192,7 @@
                 android:text="Verify"
                 android:textSize="18sp"
                 android:textColor="#FFFFFF"
-                android:fontFamily="sans-serif"
-                android:textStyle="normal"
+                android:textStyle="bold"
                 app:cornerRadius="5dp"
                 app:backgroundTint="#EF652B"
                 app:strokeColor="#EF652B"
@@ -217,8 +207,7 @@
                 android:text="Back to Login"
                 android:textSize="18sp"
                 android:textColor="#202239"
-                android:fontFamily="sans-serif"
-                android:textStyle="normal"
+                android:textStyle="bold"
                 app:cornerRadius="5dp"
                 app:backgroundTint="#FFFFFF"
                 app:strokeColor="#202239"

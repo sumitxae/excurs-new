@@ -127,8 +127,6 @@ public class DeviceConnectedCompleteActivity extends BaseActivity{
             }
         });
         
-        // TODO: Add beacon payload logging when the correct method is available
-        // For now, we'll log connection events and add payload logging later
         Log.d(TAG, "BLE Manager initialized for MAC: " + mMac);
     }
 
@@ -296,14 +294,15 @@ public class DeviceConnectedCompleteActivity extends BaseActivity{
      * BroadCast Parameters setting
      */
     private void setCombinationAdvParameters(){
-        if(deviceInfoAdvParametersConfiguration == null){
+        if(combinationAdvParametersConfiguration == null){
             return;
         }
+        // Set advertising interval to 1 second (1000ms) for faster temperature/humidity broadcast
         mBleManager.setAdvParametersConfiguration(mMac, combinationAdvParametersConfiguration.getFrameType(), combinationAdvParametersConfiguration.getSlotNumber(),
                 1000,-4,combinationAdvParametersConfiguration.getAdvertisingContent(),new OnModifyConfigurationListener() {
                     @Override
                     public void onModifyResult(boolean b) {
-
+                        Log.d(TAG, "CombinationFrame advertising interval set to 1s - Result: " + b);
                         Toast.makeText(DeviceConnectedCompleteActivity.this,"Set Adv Parameters Result:"+b,Toast.LENGTH_LONG).show();
                     }
                 });

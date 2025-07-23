@@ -31,7 +31,6 @@
     <string name="firmware_version">Firmware Version</string>
     <string name="connection_status">Connection Status</string>
     <string name="current_temperature">Current Temperature</string>
-    <string name="current_status">Current Status</string>
     <string name="status_fetching">Fetching</string>
     <string name="status_fetch_completed">Fetch Completed</string>
     <string name="status_uploading">Uploading</string>

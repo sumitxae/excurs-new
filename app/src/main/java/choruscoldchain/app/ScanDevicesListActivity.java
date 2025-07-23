@@ -92,6 +92,7 @@ public class ScanDevicesListActivity extends BaseActivity {
     private DeviceDiscoveryManager.OnDevicesUpdatedListener deviceUpdateListener; 
     private boolean permissionsGranted = false;
     private ImageView ivChorusLogo;
+    private boolean isInitialScan = true; // Track if this is the first scan
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -115,16 +116,37 @@ public class ScanDevicesListActivity extends BaseActivity {
         deviceUpdateListener = new DeviceDiscoveryManager.OnDevicesUpdatedListener() {
             @Override
             public void onDevicesUpdated(List<MST03Entity> devices) {
+                Log.d("ScanOptimization", "onDevicesUpdated called with " + devices.size() + " devices");
+
                 runOnUiThread(() -> {
+                    try {
                     updateAllDiscoveredDevices(devices);
 
-                    if (isSearchMode && binding.etSearch.getText().toString().trim().length() > 0) {
+                        Log.d("ScanOptimization", "Final device list (" + allDiscoveredDevices.size() + " devices):");
+                        for (int i = 0; i < allDiscoveredDevices.size(); i++) {
+                            MST03Entity device = allDiscoveredDevices.get(i);
+                            boolean hasExcursion = hasExcursion(device);
+                            Log.d("ScanOptimization", "  " + i + ": " + device.getMacAddress() +
+                                    " - Excursion: " + hasExcursion);
+                        }
 
+                    if (isSearchMode && binding.etSearch.getText().toString().trim().length() > 0) {
                         String currentSearchText = binding.etSearch.getText().toString().trim();
                         filterDevices(currentSearchText);
                     } else {
-                        mDevicesListAdapter.setList(allDiscoveredDevices);
-                        mDevicesListAdapter.notifyDataSetChanged();
+                            if (mDevicesListAdapter != null) {
+                                mDevicesListAdapter.setList(new ArrayList<>(allDiscoveredDevices));
+                                mDevicesListAdapter.notifyDataSetChanged();
+                                Log.d("ScanOptimization",
+                                        "Adapter updated with " + allDiscoveredDevices.size() + " devices");
+                            } else {
+                                Log.e("ScanOptimization", "Adapter is null - cannot update UI");
+                            }
+                        }
+                        Log.d("ScanOptimization", "Real-time update: " + devices.size() + " devices, total: "
+                                + allDiscoveredDevices.size());
+                    } catch (Exception e) {
+                        Log.e("ScanOptimization", "Error in onDevicesUpdated: " + e.getMessage(), e);
                     }
                 });
             }
@@ -241,10 +263,10 @@ public class ScanDevicesListActivity extends BaseActivity {
                 processQRScanResult(scanResult);
             }
         } else if (requestCode == 1002) {
-            // Check if storage permission was granted
+
             if (hasStoragePermissions()) {
                 Log.d("BeaconRawData", "Storage permission granted via settings");
-                // Retry CSV generation
+
                 if (!processedHistoricalData.isEmpty()) {
                     generateCSVForCurrentData();
                 }
@@ -478,22 +500,25 @@ public class ScanDevicesListActivity extends BaseActivity {
     protected void onDestroy() {
         super.onDestroy();
         
-        if (connectionTimeoutHandler != null) {
-            connectionTimeoutHandler.removeCallbacksAndMessages(null);
-        }
-        
         if (searchDebounceHandler != null) {
             searchDebounceHandler.removeCallbacksAndMessages(null);
+        }
+        if (connectionTimeoutHandler != null) {
+            connectionTimeoutHandler.removeCallbacksAndMessages(null);
         }
         
         if (deviceManager != null && deviceUpdateListener != null) {
             deviceManager.removeListener(deviceUpdateListener);
         }
-        
+        if (isBackgroundServiceRunning()) {
+            stopService(new Intent(this, BackgroundScanService.class));
+        }
+        if (mBleManager != null) {
+            mBleManager.setOnConnStateListener(null);
+        }
         if (httpLogger != null) {
             httpLogger.shutdown();
         }
-        
     }
 
     private void initRefresh() {
@@ -544,8 +569,6 @@ public class ScanDevicesListActivity extends BaseActivity {
         isConnecting = true;
         mst03Entity = device;
         
-        mDevicesListAdapter.setConnectButtonsEnabled(false);
-        
         WaitDialog.show("Connecting to device...");
         
         connectionTimeoutHandler.postDelayed(new Runnable() {
@@ -554,7 +577,6 @@ public class ScanDevicesListActivity extends BaseActivity {
                 if (isConnecting) {
                     
                     isConnecting = false;
-                    mDevicesListAdapter.setConnectButtonsEnabled(true);
                     WaitDialog.dismiss();
                     
                     int batteryLevel = -1;
@@ -616,7 +638,6 @@ public class ScanDevicesListActivity extends BaseActivity {
             Log.e("ScanDebug", "Error connecting to device: " + e.getMessage());
             e.printStackTrace();
             isConnecting = false;
-            mDevicesListAdapter.setConnectButtonsEnabled(true);
             WaitDialog.dismiss();
             
             int batteryLevel = -1;
@@ -760,7 +781,6 @@ public class ScanDevicesListActivity extends BaseActivity {
                             Toast.makeText(ScanDevicesListActivity.this, "Authentication failed. Please try again.",
                                     Toast.LENGTH_LONG).show();
                             isConnecting = false;
-                            mDevicesListAdapter.setConnectButtonsEnabled(true);
                             
                             if (mBleManager != null) {
                                 mBleManager.disConnect(s);
@@ -817,7 +837,6 @@ public class ScanDevicesListActivity extends BaseActivity {
                     connectionTimeoutHandler.removeCallbacksAndMessages(null);
                     updateConnectionStatus("Disconnected");
                     isConnecting = false;
-                    mDevicesListAdapter.setConnectButtonsEnabled(true);
 
                     if (mst03Entity != null && s.equals(mst03Entity.getMacAddress())) {
                         hideDeviceDetailsCard();
@@ -905,40 +924,107 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
 
     private void startScan() {
-        if (!permissionsGranted || mObjectAnimator == null)
-            return;
+        Log.d("ScanOptimization", "startScan called - permissionsGranted: " + permissionsGranted +
+                ", mObjectAnimator: " + (mObjectAnimator != null) + ", isInitialScan: " + isInitialScan);
+
+        if (mObjectAnimator != null) {
+            mObjectAnimator.start();
+            Log.d("ScanOptimization", "Animation started");
+        } else {
+            Log.w("ScanOptimization", "mObjectAnimator is null, cannot start animation");
+        }
 
         if (isBackgroundServiceRunning()) {
-            
+            Log.d("ScanOptimization", "Background service already running");
         } else {
-            
+            Log.d("ScanOptimization", "Starting background scan service");
             startBackgroundScanService();
         }
         
-        mObjectAnimator.start();
+        if (permissionsGranted && deviceManager != null) {
+            Log.d("ScanOptimization", "Device discovery ready - waiting for broadcast data");
+        } else {
+            Log.w("ScanOptimization", "Cannot start device discovery - permissions: " + permissionsGranted +
+                    ", deviceManager: " + (deviceManager != null));
+        }
     }
     
     private void updateAllDiscoveredDevices(List<MST03Entity> newDevices) {
+        boolean needsSorting = false;
+        boolean hasAnyExcursions = false;
+
         java.util.Map<String, Integer> existingDevicesIndexMap = new java.util.HashMap<>();
         for (int i = 0; i < allDiscoveredDevices.size(); i++) {
             existingDevicesIndexMap.put(allDiscoveredDevices.get(i).getMacAddress(), i);
         }
+
         for (MST03Entity newDevice : newDevices) {
             String macAddress = newDevice.getMacAddress();
             if (existingDevicesIndexMap.containsKey(macAddress)) {
-
                 int index = existingDevicesIndexMap.get(macAddress);
+                MST03Entity oldDevice = allDiscoveredDevices.get(index);
+
+                boolean oldHasExcursion = hasExcursion(oldDevice);
+                boolean newHasExcursion = hasExcursion(newDevice);
+
+                if (oldHasExcursion != newHasExcursion) {
+                    needsSorting = true;
+                    Log.d("ScanOptimization", "Excursion status changed for " + macAddress +
+                            ": " + oldHasExcursion + " -> " + newHasExcursion);
+                }
+                if (newHasExcursion) {
+                    hasAnyExcursions = true;
+                }
                 allDiscoveredDevices.set(index, newDevice);
             } else {
+                boolean newHasExcursion = hasExcursion(newDevice);
+                if (newHasExcursion) {
+                    needsSorting = true;
+                    hasAnyExcursions = true;
+                    Log.d("ScanOptimization", "New device with excursion: " + macAddress);
+                }
                 allDiscoveredDevices.add(newDevice);
             }
         }
+
+        if (hasAnyExcursions) {
+            needsSorting = true;
+            Log.d("ScanOptimization", "Forcing sort because excursions detected");
+        }
+
+        if (needsSorting) {
         allDiscoveredDevices.sort(new Comparator<MST03Entity>() {
             @Override
             public int compare(MST03Entity o1, MST03Entity o2) {
-                return o2.getRssi() - o1.getRssi();
-            }
-        });
+                    boolean o1HasExcursion = hasExcursion(o1);
+                    boolean o2HasExcursion = hasExcursion(o2);
+
+                    if (o1HasExcursion && !o2HasExcursion) {
+                        return -1;
+                    } else if (!o1HasExcursion && o2HasExcursion) {
+                        return 1;
+                    } else {
+                        return 0;
+                    }
+                }
+            });
+            Log.d("ScanOptimization", "Sorted devices due to excursion status change or excursions detected");
+        }
+    }
+
+    private boolean hasExcursion(MST03Entity device) {
+        if (device.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME) != null) {
+            com.minew.ble.mst03.frames.CombinationFrame combinationFrame = (com.minew.ble.mst03.frames.CombinationFrame) device
+                    .getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
+            float temperature = combinationFrame.getTemperature();
+            boolean hasExcursion = !Float.isNaN(temperature) && temperature != 0.0f &&
+                    (temperature > 8.0f || temperature < 2.0f);
+            Log.d("ScanSort", "Device " + device.getMacAddress() +
+                    " - Temp: " + temperature + "°C, Has Excursion: " + hasExcursion);
+            return hasExcursion;
+        }
+        Log.d("ScanSort", "Device " + device.getMacAddress() + " - No CombinationFrame, Has Excursion: false");
+        return false;
     }
 
     private void stopScan() {
@@ -988,7 +1074,7 @@ public class ScanDevicesListActivity extends BaseActivity {
 
         long startTime = systemTime - (24 * 60 * 60);
         long endTime = systemTime;
-
+        
         try {
             
             mBleManager.queryHistoryData(mst03Entity.getMacAddress(), 1, startTime, endTime, systemTime, 
@@ -1063,10 +1149,9 @@ public class ScanDevicesListActivity extends BaseActivity {
             mBleManager.disConnect(mst03Entity.getMacAddress());
             
             isConnecting = false;
-            mDevicesListAdapter.setConnectButtonsEnabled(true);
         }
     }
-
+    
     private void processHistoricalDataForLocalDisplayUltraOptimized(List<HtData> htDataList) {
         if (htDataList == null || htDataList.isEmpty()) {
             Log.d("BeaconRawData", "No data to process");
@@ -1077,7 +1162,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         }
 
         updateProcessingStatus("Fetch Completed");
-        
+
         int dataSize = htDataList.size();
         int sampleSize = Math.min(dataSize, 1000);
 
@@ -1088,8 +1173,8 @@ public class ScanDevicesListActivity extends BaseActivity {
 
     private void storeProcessedData(List<HtData> filteredData, List<ExcursionData> excursions) {
         synchronized (processedHistoricalData) {
-        processedHistoricalData.clear();
-        processedHistoricalData.addAll(filteredData);
+            processedHistoricalData.clear();
+            processedHistoricalData.addAll(filteredData);
         }
 
         synchronized (processedExcursionData) {
@@ -1105,10 +1190,9 @@ public class ScanDevicesListActivity extends BaseActivity {
         if (mst03Entity != null && mBleManager != null) {
             mBleManager.disConnect(mst03Entity.getMacAddress());
             isConnecting = false;
-            mDevicesListAdapter.setConnectButtonsEnabled(true);
         }
     }
-    
+
     public static List<HtData> getProcessedHistoricalData() {
         return processedHistoricalData;
     }
@@ -1127,7 +1211,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         isDataProcessingComplete = false;
         currentProcessingStatus = "Idle";
     }
-    
+
     private void updateConnectionStatus(String status) {
         binding.tvScanConnectionStatus.setText("Status: " + status);
     }
@@ -1146,9 +1230,8 @@ public class ScanDevicesListActivity extends BaseActivity {
         excursionDataList.clear();
         
         isConnecting = false;
-        mDevicesListAdapter.setConnectButtonsEnabled(true);
     }
-    
+
     private void loadChorusLogo() {
         try {
 
@@ -1165,7 +1248,7 @@ public class ScanDevicesListActivity extends BaseActivity {
             }
         }
     }
-
+    
     private void processHistoricalDataForTripDetectionOptimized(List<HtData> htDataList) {
         if (htDataList == null || htDataList.isEmpty()) {
             Log.d("BeaconRawData", "No data to process");
@@ -1174,51 +1257,61 @@ public class ScanDevicesListActivity extends BaseActivity {
             return;
         }
 
-        // Use the correct trip detection logic for optimized approach
         List<HtData> tripData = new ArrayList<>();
         List<ExcursionData> tripExcursions = new ArrayList<>();
 
-        // Find the latest excursion with no normal after it (going backwards)
         int latestExcursionIndex = -1;
+        int lastNormalIndex = -1;
 
-        // Process from latest (current time) to oldest
+        // Find the latest excursion point
         for (int i = htDataList.size() - 1; i >= 0; i--) {
             HtData htData = htDataList.get(i);
             float temperature = htData.getTemperature();
             boolean isNormal = (temperature >= 2.0f && temperature <= 8.0f);
-            
+
             if (!isNormal) {
-                // Found an excursion - mark it as potential trip start
                 latestExcursionIndex = i;
-            } else {
-                // Found a normal reading - this invalidates any excursions before it
-                // The excursion we found before this normal is our trip start
-                break; // Stop here - no need to continue
+                break;
             }
         }
 
-        // Extract trip data: from latest excursion to current time
+        // If we found an excursion, find the last normal temperature point before it
         if (latestExcursionIndex != -1) {
-            // Trip data: from latest excursion to current time
-            tripData = htDataList.subList(latestExcursionIndex, htDataList.size());
+            // Search backwards from the excursion point to find the last normal temperature
+            for (int i = latestExcursionIndex - 1; i >= 0; i--) {
+                HtData htData = htDataList.get(i);
+                float temperature = htData.getTemperature();
+                boolean isNormal = (temperature >= 2.0f && temperature <= 8.0f);
 
-            // Find all excursions within the trip period
-            for (HtData htData : tripData) {
+                if (isNormal) {
+                    lastNormalIndex = i;
+                    break;
+        }
+            }
+
+            // If we found a normal point, start from there; otherwise start from excursion point
+            int startIndex = (lastNormalIndex != -1) ? lastNormalIndex : latestExcursionIndex;
+            tripData = htDataList.subList(startIndex, htDataList.size());
+
+            // Only count excursions from the excursion point onwards
+            for (int i = latestExcursionIndex; i < htDataList.size(); i++) {
+                HtData htData = htDataList.get(i);
                 float temperature = htData.getTemperature();
                 if (temperature < 2.0f || temperature > 8.0f) {
                     tripExcursions.add(new ExcursionData(temperature, htData.getTimestamps(),
-                        temperature < 2.0f ? "LOW" : "HIGH", mst03Entity.getMacAddress()));
+                            temperature < 2.0f ? "LOW" : "HIGH", mst03Entity.getMacAddress()));
                 }
             }
 
-            long tripDurationMinutes = tripData.isEmpty() ? 0 : 
-                (tripData.get(tripData.size() - 1).getTimestamps() - tripData.get(0).getTimestamps()) / (1000 * 60);
+            long tripDurationMinutes = tripData.isEmpty() ? 0
+                    : (tripData.get(tripData.size() - 1).getTimestamps() - tripData.get(0).getTimestamps())
+                            / (1000 * 60);
 
-            Log.d("BeaconRawData", "Optimized trip detected: " + tripData.size() + " records from index " +
-                latestExcursionIndex + " to " + (htDataList.size() - 1) +
-                " with " + tripExcursions.size() + " excursions. Duration: " + tripDurationMinutes + " minutes");
+            String startPoint = (lastNormalIndex != -1) ? "last normal point (index " + lastNormalIndex + ")" : "excursion start (index " + latestExcursionIndex + ")";
+            Log.d("BeaconRawData", "Optimized trip detected: " + tripData.size() + " records starting from " + startPoint +
+                    " to " + (htDataList.size() - 1) + " with " + tripExcursions.size() + " excursions. Duration: " + tripDurationMinutes + " minutes");
         } else {
-            // No excursion found - use recent data (last 1000 records or all if less)
+            // No excursion found, use recent data
             int startIndex = Math.max(0, htDataList.size() - 1000);
             tripData = htDataList.subList(startIndex, htDataList.size());
             Log.d("BeaconRawData", "No excursion trip found, using recent " + tripData.size() + " records");
@@ -1226,7 +1319,7 @@ public class ScanDevicesListActivity extends BaseActivity {
 
         storeProcessedDataOptimized(tripData, tripExcursions);
     }
-
+    
     private boolean hasRecentExcursions(List<HtData> htDataList) {
 
         int checkSize = Math.min(100, htDataList.size());
@@ -1252,8 +1345,8 @@ public class ScanDevicesListActivity extends BaseActivity {
 
                 firstExcursionStart = findFirstExcursionBackwards(htDataList, mid);
                 break;
-            } else {
-
+                    } else {
+                        
                 left = mid + 1;
             }
         }
@@ -1296,7 +1389,7 @@ public class ScanDevicesListActivity extends BaseActivity {
 
                     break;
                 }
-            } else {
+                    } else {
                 consecutiveNormalReadings = 0;
             }
 
@@ -1316,21 +1409,38 @@ public class ScanDevicesListActivity extends BaseActivity {
         List<ExcursionData> tripExcursions = new ArrayList<>();
 
         if (firstExcursionStartIndex != -1) {
-
-            tripData = htDataList.subList(firstExcursionStartIndex, htDataList.size());
-
-            for (HtData htData : tripData) {
+            // Find the last normal temperature point before the excursion
+            int lastNormalIndex = -1;
+            for (int i = firstExcursionStartIndex - 1; i >= 0; i--) {
+                HtData htData = htDataList.get(i);
                 float temperature = htData.getTemperature();
+                boolean isNormal = (temperature >= 2.0f && temperature <= 8.0f);
+
+                if (isNormal) {
+                    lastNormalIndex = i;
+                    break;
+                }
+            }
+
+            // If we found a normal point, start from there; otherwise start from excursion point
+            int startIndex = (lastNormalIndex != -1) ? lastNormalIndex : firstExcursionStartIndex;
+            tripData = htDataList.subList(startIndex, htDataList.size());
+
+            // Only count excursions from the excursion point onwards
+            for (int i = firstExcursionStartIndex; i < htDataList.size(); i++) {
+            HtData htData = htDataList.get(i);
+            float temperature = htData.getTemperature();
                 if (temperature < 2.0f || temperature > 8.0f) {
                     tripExcursions.add(new ExcursionData(temperature, htData.getTimestamps(),
                             temperature < 2.0f ? "LOW" : "HIGH", mst03Entity.getMacAddress()));
                 }
             }
 
-            Log.d("BeaconRawData", "Optimized trip detected: " + tripData.size() + " records from index " +
-                    firstExcursionStartIndex + " with " + tripExcursions.size() + " excursions");
+            String startPoint = (lastNormalIndex != -1) ? "last normal point (index " + lastNormalIndex + ")" : "excursion start (index " + firstExcursionStartIndex + ")";
+            Log.d("BeaconRawData", "Optimized trip detected: " + tripData.size() + " records starting from " + startPoint +
+                    " with " + tripExcursions.size() + " excursions");
         } else {
-
+            // No excursion found, use recent data
             int recentSize = Math.min(1000, htDataList.size());
             int startIndex = htDataList.size() - recentSize;
             tripData = htDataList.subList(startIndex, htDataList.size());
@@ -1351,26 +1461,23 @@ public class ScanDevicesListActivity extends BaseActivity {
             processedExcursionData.addAll(tripExcursions);
         }
 
-        // Generate all CSV files for testing purposes
         generateAllCSVFiles(tripData, tripExcursions);
 
         isDataProcessingComplete = true;
         cleanupDeviceConnection();
-    }
+            }
 
-    // Generate CSV file with trip data for testing
     private void generateTripDataCSV(List<HtData> tripData, List<ExcursionData> tripExcursions) {
         try {
-            // Create CSV file with timestamp
+
             String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
                     .format(new java.util.Date());
             String deviceMac = mst03Entity != null ? mst03Entity.getMacAddress().replace(":", "_") : "unknown_device";
             String fileName = "trip_data_" + deviceMac + "_" + timestamp + ".csv";
 
-            // Try to save in Downloads directory (accessible in Android 15)
             java.io.File csvFile = saveToDownloadsDirectory(fileName);
             if (csvFile == null) {
-                // Fallback to app's external files directory
+
                 java.io.File externalDir = getExternalFilesDir(null);
                 if (externalDir == null) {
                     Log.e("BeaconRawData", "No accessible directory available");
@@ -1379,32 +1486,26 @@ public class ScanDevicesListActivity extends BaseActivity {
                 csvFile = new java.io.File(externalDir, fileName);
             }
 
-            // Write CSV data
             java.io.FileWriter writer = new java.io.FileWriter(csvFile);
             java.io.BufferedWriter bufferedWriter = new java.io.BufferedWriter(writer);
 
-            // Write comprehensive CSV header with all relevant information
             bufferedWriter.write(
                     "Record Number,Unix Timestamp,Date & Time,Temperature (°C),Humidity (%),Temperature Status,Excursion Type,Device MAC Address,Trip Duration (minutes),Notes\n");
 
-            // Calculate trip statistics for reference
             long tripStartTime = tripData.isEmpty() ? 0 : tripData.get(0).getTimestamps();
             long tripEndTime = tripData.isEmpty() ? 0 : tripData.get(tripData.size() - 1).getTimestamps();
             long tripDurationMinutes = tripData.isEmpty() ? 0 : (tripEndTime - tripStartTime) / (1000 * 60);
-
-            // Write all trip data records
+        
             for (int i = 0; i < tripData.size(); i++) {
                 HtData htData = tripData.get(i);
                 long timestamp_ms = htData.getTimestamps();
 
-                // Format date and time in readable format
                 String dateTime = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
                         .format(new java.util.Date(timestamp_ms));
 
             float temperature = htData.getTemperature();
                 float humidity = htData.getHumidity();
 
-                // Determine temperature status and excursion type
                 String temperatureStatus;
                 String excursionType;
                 String notes = "";
@@ -1425,22 +1526,19 @@ public class ScanDevicesListActivity extends BaseActivity {
 
                 String deviceMacAddress = mst03Entity != null ? mst03Entity.getMacAddress() : "unknown";
 
-                // Calculate time from trip start
                 long timeFromStart = tripData.isEmpty() ? 0 : (timestamp_ms - tripStartTime) / (1000 * 60);
 
-                // Write comprehensive CSV line with all data
                 bufferedWriter.write(String.format("%d,%d,%s,%.2f,%.2f,%s,%s,%s,%d,%s\n",
-                        i + 1, // Record Number
-                        timestamp_ms, // Unix Timestamp
-                        dateTime, // Date & Time
-                        temperature, // Temperature (°C)
-                        humidity, // Humidity (%)
-                        temperatureStatus, // Temperature Status
-                        excursionType, // Excursion Type
-                        deviceMacAddress, // Device MAC Address
-                        timeFromStart, // Trip Duration (minutes from start)
-                        notes // Notes
-                ));
+                        i + 1,
+                        timestamp_ms,
+                        dateTime,
+                        temperature,
+                        humidity,
+                        temperatureStatus,
+                        excursionType,
+                        deviceMacAddress,
+                        timeFromStart,
+                        notes));
             }
 
             bufferedWriter.close();
@@ -1451,17 +1549,8 @@ public class ScanDevicesListActivity extends BaseActivity {
                     "Trip data: " + tripData.size() + " records, " + tripExcursions.size() + " excursions");
             Log.d("BeaconRawData", "Trip duration: " + tripDurationMinutes + " minutes");
 
-            // Show success message with file location and summary
             final String finalFileName = fileName;
             final String fileParent = csvFile.getParent();
-                        runOnUiThread(() -> {
-                String message = "CSV saved: " + finalFileName + " (" + tripData.size() + " records)";
-                if (fileParent != null && fileParent.contains("Download")) {
-                    message += " (in Downloads folder)";
-                }
-                Toast.makeText(this, message, Toast.LENGTH_LONG).show();
-            });
-
         } catch (Exception e) {
             Log.e("BeaconRawData", "Error generating CSV: " + e.getMessage());
             e.printStackTrace();
@@ -1471,415 +1560,69 @@ public class ScanDevicesListActivity extends BaseActivity {
             });
         }
     }
-
-    // Generate detailed excursion report CSV
-    private void generateExcursionReportCSV(List<ExcursionData> excursions) {
-        if (excursions.isEmpty()) {
-            Log.d("BeaconRawData", "No excursions to report");
-            return;
-        }
-
-        try {
-            // Create CSV file with timestamp
-            String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
-                    .format(new java.util.Date());
-            String deviceMac = mst03Entity != null ? mst03Entity.getMacAddress().replace(":", "_") : "unknown_device";
-            String fileName = "excursion_report_" + deviceMac + "_" + timestamp + ".csv";
-
-            // Try to save in Downloads directory
-            java.io.File csvFile = saveToDownloadsDirectory(fileName);
-            if (csvFile == null) {
-                // Fallback to app's external files directory
-                java.io.File externalDir = getExternalFilesDir(null);
-                if (externalDir == null) {
-                    Log.e("BeaconRawData", "No accessible directory available");
-                    return;
-                }
-                csvFile = new java.io.File(externalDir, fileName);
-            }
-
-            // Write CSV data
-            java.io.FileWriter writer = new java.io.FileWriter(csvFile);
-            java.io.BufferedWriter bufferedWriter = new java.io.BufferedWriter(writer);
-
-            // Write comprehensive CSV header
-            bufferedWriter.write(
-                    "Excursion Number,Unix Timestamp,Date & Time,Temperature (°C),Excursion Type,Device MAC Address,Severity Level,Description,Duration (seconds),Duration (minutes),Risk Assessment\n");
-
-            // Group excursions by type and calculate duration
-            java.util.Map<String, java.util.List<ExcursionData>> excursionsByType = new java.util.HashMap<>();
-            for (ExcursionData excursion : excursions) {
-                String type = excursion.getExcursionType();
-                excursionsByType.computeIfAbsent(type, k -> new java.util.ArrayList<>()).add(excursion);
-            }
-
-            int excursionNumber = 1;
-            // Write excursion data with detailed analysis
-            for (java.util.Map.Entry<String, java.util.List<ExcursionData>> entry : excursionsByType.entrySet()) {
-                String type = entry.getKey();
-                java.util.List<ExcursionData> typeExcursions = entry.getValue();
-
-                // Sort by timestamp
-                typeExcursions.sort((a, b) -> Long.compare(a.getTimestamp(), b.getTimestamp()));
-
-                long startTime = typeExcursions.get(0).getTimestamp();
-                long endTime = typeExcursions.get(typeExcursions.size() - 1).getTimestamp();
-                long durationSeconds = endTime - startTime;
-                long durationMinutes = durationSeconds / 60;
-
-                for (ExcursionData excursion : typeExcursions) {
-                    long timestamp_ms = excursion.getTimestamp();
-                    String dateTime = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss",
-                            java.util.Locale.getDefault())
-                            .format(new java.util.Date(timestamp_ms));
-
-                    String deviceMacAddress = mst03Entity != null ? mst03Entity.getMacAddress() : "unknown";
-                    float temperature = excursion.getTemperature();
-
-                    // Determine severity level and description
-                    String severityLevel;
-                    String description;
-                    String riskAssessment;
-
-                    if ("LOW".equals(type)) {
-                        if (temperature < 0.0f) {
-                            severityLevel = "CRITICAL";
-                            description = "Extreme low temperature - Risk of freezing";
-                            riskAssessment = "HIGH RISK - Immediate action required";
-                        } else if (temperature < 1.0f) {
-                            severityLevel = "HIGH";
-                            description = "Very low temperature - Significant risk";
-                            riskAssessment = "HIGH RISK - Action required";
-                        } else {
-                            severityLevel = "MEDIUM";
-                            description = "Low temperature - Moderate risk";
-                            riskAssessment = "MEDIUM RISK - Monitor closely";
-                        }
-                    } else if ("HIGH".equals(type)) {
-                        if (temperature > 15.0f) {
-                            severityLevel = "CRITICAL";
-                            description = "Extreme high temperature - Risk of spoilage";
-                            riskAssessment = "HIGH RISK - Immediate action required";
-                        } else if (temperature > 12.0f) {
-                            severityLevel = "HIGH";
-                            description = "Very high temperature - Significant risk";
-                            riskAssessment = "HIGH RISK - Action required";
-                        } else {
-                            severityLevel = "MEDIUM";
-                            description = "High temperature - Moderate risk";
-                            riskAssessment = "MEDIUM RISK - Monitor closely";
-                        }
-                    } else {
-                        severityLevel = "NORMAL";
-                        description = "Temperature within normal range";
-                        riskAssessment = "LOW RISK - Normal operation";
-                    }
-
-                    // Write comprehensive CSV line
-                    bufferedWriter.write(String.format("%d,%d,%s,%.2f,%s,%s,%s,%s,%d,%d,%s\n",
-                            excursionNumber++, // Excursion Number
-                            timestamp_ms, // Unix Timestamp
-                            dateTime, // Date & Time
-                            temperature, // Temperature (°C)
-                            type, // Excursion Type
-                            deviceMacAddress, // Device MAC Address
-                            severityLevel, // Severity Level
-                            description, // Description
-                            durationSeconds, // Duration (seconds)
-                            durationMinutes, // Duration (minutes)
-                            riskAssessment // Risk Assessment
-                    ));
-                }
-            }
-
-            bufferedWriter.close();
-            writer.close();
-
-            Log.d("BeaconRawData", "Comprehensive excursion report CSV generated: " + csvFile.getAbsolutePath());
-            Log.d("BeaconRawData", "Total excursions: " + excursions.size());
-
-        } catch (Exception e) {
-            Log.e("BeaconRawData", "Error generating excursion report CSV: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    // Generate trip summary CSV
-    private void generateTripSummaryCSV(List<HtData> tripData, List<ExcursionData> tripExcursions) {
-        try {
-            // Create CSV file with timestamp
-            String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
-                    .format(new java.util.Date());
-            String deviceMac = mst03Entity != null ? mst03Entity.getMacAddress().replace(":", "_") : "unknown_device";
-            String fileName = "trip_summary_" + deviceMac + "_" + timestamp + ".csv";
-
-            // Try to save in Downloads directory
-            java.io.File csvFile = saveToDownloadsDirectory(fileName);
-            if (csvFile == null) {
-                // Fallback to app's external files directory
-                java.io.File externalDir = getExternalFilesDir(null);
-                if (externalDir == null) {
-                    Log.e("BeaconRawData", "No accessible directory available");
-                    return;
-                }
-                csvFile = new java.io.File(externalDir, fileName);
-            }
-
-            // Write CSV data
-            java.io.FileWriter writer = new java.io.FileWriter(csvFile);
-            java.io.BufferedWriter bufferedWriter = new java.io.BufferedWriter(writer);
-
-            // Write comprehensive CSV header
-            bufferedWriter.write("Category,Parameter,Value,Unit,Description\n");
-
-            // Calculate comprehensive trip statistics
-            if (!tripData.isEmpty()) {
-                long tripStartTime = tripData.get(0).getTimestamps();
-                long tripEndTime = tripData.get(tripData.size() - 1).getTimestamps();
-                long tripDurationSeconds = tripEndTime - tripStartTime;
-                long tripDurationMinutes = tripDurationSeconds / 60;
-                long tripDurationHours = tripDurationMinutes / 60;
-
-                String tripStartDateTime = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss",
-                        java.util.Locale.getDefault())
-                        .format(new java.util.Date(tripStartTime));
-                String tripEndDateTime = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss",
-                        java.util.Locale.getDefault())
-                        .format(new java.util.Date(tripEndTime));
-
-                // Calculate temperature statistics
-                float minTemp = Float.MAX_VALUE, maxTemp = Float.MIN_VALUE, avgTemp = 0;
-                float minHumidity = Float.MAX_VALUE, maxHumidity = Float.MIN_VALUE, avgHumidity = 0;
-
-                // Track temperature ranges
-                int normalTempCount = 0, lowTempCount = 0, highTempCount = 0;
-                int criticalLowCount = 0, criticalHighCount = 0;
-
-                for (HtData htData : tripData) {
-                    float temp = htData.getTemperature();
-                    float humidity = htData.getHumidity();
-
-                    minTemp = Math.min(minTemp, temp);
-                    maxTemp = Math.max(maxTemp, temp);
-                    avgTemp += temp;
-
-                    minHumidity = Math.min(minHumidity, humidity);
-                    maxHumidity = Math.max(maxHumidity, humidity);
-                    avgHumidity += humidity;
-
-                    // Count temperature ranges
-                    if (temp >= 2.0f && temp <= 8.0f) {
-                        normalTempCount++;
-                    } else if (temp < 2.0f) {
-                        lowTempCount++;
-                        if (temp < 0.0f)
-                            criticalLowCount++;
-        } else {
-                        highTempCount++;
-                        if (temp > 15.0f)
-                            criticalHighCount++;
-                    }
-                }
-
-                avgTemp /= tripData.size();
-                avgHumidity /= tripData.size();
-
-                // Count excursions by type and severity
-                int lowExcursions = 0, highExcursions = 0;
-                int criticalExcursions = 0, highSeverityExcursions = 0, mediumSeverityExcursions = 0;
-
-                for (ExcursionData excursion : tripExcursions) {
-                    float temp = excursion.getTemperature();
-                    if ("LOW".equals(excursion.getExcursionType())) {
-                        lowExcursions++;
-                        if (temp < 0.0f)
-                            criticalExcursions++;
-                        else if (temp < 1.0f)
-                            highSeverityExcursions++;
-                        else
-                            mediumSeverityExcursions++;
-                    } else if ("HIGH".equals(excursion.getExcursionType())) {
-                        highExcursions++;
-                        if (temp > 15.0f)
-                            criticalExcursions++;
-                        else if (temp > 12.0f)
-                            highSeverityExcursions++;
-                        else
-                            mediumSeverityExcursions++;
-                    }
-                }
-
-                // Calculate percentages
-                float normalTempPercentage = (normalTempCount * 100.0f) / tripData.size();
-                float excursionPercentage = (tripExcursions.size() * 100.0f) / tripData.size();
-                float criticalExcursionPercentage = (criticalExcursions * 100.0f) / tripExcursions.size();
-
-                // Write comprehensive summary data
-                bufferedWriter.write("Device Information,Device MAC,"
-                        + (mst03Entity != null ? mst03Entity.getMacAddress() : "unknown") + ",,\n");
-                bufferedWriter.write("Device Information,Device Name,"
-                        + (mst03Entity != null ? mst03Entity.getName() : "unknown") + ",,\n");
-
-                bufferedWriter.write("Trip Timeline,Trip Start," + tripStartDateTime + ",,\n");
-                bufferedWriter.write("Trip Timeline,Trip End," + tripEndDateTime + ",,\n");
-                bufferedWriter.write("Trip Timeline,Trip Duration (seconds)," + tripDurationSeconds + ",seconds,\n");
-                bufferedWriter.write("Trip Timeline,Trip Duration (minutes)," + tripDurationMinutes + ",minutes,\n");
-                bufferedWriter.write("Trip Timeline,Trip Duration (hours)," + tripDurationHours + ",hours,\n");
-
-                bufferedWriter.write("Data Statistics,Total Records," + tripData.size() + ",count,\n");
-                bufferedWriter.write("Data Statistics,Data Collection Rate,"
-                        + String.format("%.2f", (tripData.size() * 60.0 / tripDurationMinutes)) + ",records/minute,\n");
-
-                bufferedWriter
-                        .write("Temperature Analysis,Minimum Temperature," + String.format("%.2f", minTemp) + ",°C,\n");
-                bufferedWriter
-                        .write("Temperature Analysis,Maximum Temperature," + String.format("%.2f", maxTemp) + ",°C,\n");
-                bufferedWriter
-                        .write("Temperature Analysis,Average Temperature," + String.format("%.2f", avgTemp) + ",°C,\n");
-                bufferedWriter.write("Temperature Analysis,Temperature Range,"
-                        + String.format("%.2f", maxTemp - minTemp) + ",°C,\n");
-
-                bufferedWriter
-                        .write("Humidity Analysis,Minimum Humidity," + String.format("%.2f", minHumidity) + ",%,\n");
-                bufferedWriter
-                        .write("Humidity Analysis,Maximum Humidity," + String.format("%.2f", maxHumidity) + ",%,\n");
-                bufferedWriter
-                        .write("Humidity Analysis,Average Humidity," + String.format("%.2f", avgHumidity) + ",%,\n");
-                bufferedWriter.write("Humidity Analysis,Humidity Range,"
-                        + String.format("%.2f", maxHumidity - minHumidity) + ",%,\n");
-
-                bufferedWriter
-                        .write("Temperature Distribution,Normal Temperature Records," + normalTempCount + ",count,\n");
-                bufferedWriter.write("Temperature Distribution,Normal Temperature Percentage,"
-                        + String.format("%.2f", normalTempPercentage) + ",%,\n");
-                bufferedWriter.write("Temperature Distribution,Low Temperature Records," + lowTempCount + ",count,\n");
-                bufferedWriter
-                        .write("Temperature Distribution,High Temperature Records," + highTempCount + ",count,\n");
-                bufferedWriter.write(
-                        "Temperature Distribution,Critical Low Records (<0°C)," + criticalLowCount + ",count,\n");
-                bufferedWriter.write(
-                        "Temperature Distribution,Critical High Records (>15°C)," + criticalHighCount + ",count,\n");
-
-                bufferedWriter.write("Excursion Analysis,Total Excursions," + tripExcursions.size() + ",count,\n");
-                bufferedWriter.write("Excursion Analysis,Excursion Percentage,"
-                        + String.format("%.2f", excursionPercentage) + ",%,\n");
-                bufferedWriter.write("Excursion Analysis,Low Temperature Excursions," + lowExcursions + ",count,\n");
-                bufferedWriter.write("Excursion Analysis,High Temperature Excursions," + highExcursions + ",count,\n");
-                bufferedWriter.write("Excursion Analysis,Critical Excursions," + criticalExcursions + ",count,\n");
-                bufferedWriter.write("Excursion Analysis,Critical Excursion Percentage,"
-                        + String.format("%.2f", criticalExcursionPercentage) + ",%,\n");
-                bufferedWriter
-                        .write("Excursion Analysis,High Severity Excursions," + highSeverityExcursions + ",count,\n");
-                bufferedWriter.write(
-                        "Excursion Analysis,Medium Severity Excursions," + mediumSeverityExcursions + ",count,\n");
-
-                // Risk assessment
-                String overallRiskLevel;
-                String riskDescription;
-                if (criticalExcursions > 0) {
-                    overallRiskLevel = "CRITICAL";
-                    riskDescription = "Critical temperature excursions detected - Immediate action required";
-                } else if (highSeverityExcursions > 0) {
-                    overallRiskLevel = "HIGH";
-                    riskDescription = "High severity excursions detected - Action required";
-                } else if (mediumSeverityExcursions > 0) {
-                    overallRiskLevel = "MEDIUM";
-                    riskDescription = "Medium severity excursions detected - Monitor closely";
-                } else if (tripExcursions.size() > 0) {
-                    overallRiskLevel = "LOW";
-                    riskDescription = "Minor excursions detected - Normal monitoring";
-                } else {
-                    overallRiskLevel = "NONE";
-                    riskDescription = "No excursions detected - Perfect temperature control";
-                }
-
-                bufferedWriter.write("Risk Assessment,Overall Risk Level," + overallRiskLevel + ",,\n");
-                bufferedWriter.write("Risk Assessment,Risk Description," + riskDescription + ",,\n");
-                bufferedWriter.write("Risk Assessment,Compliance Status,"
-                        + (tripExcursions.size() == 0 ? "COMPLIANT" : "NON-COMPLIANT") + ",,\n");
-
-                // Recommendations
-                String recommendations = "";
-                if (criticalExcursions > 0) {
-                    recommendations = "Immediate action required: Check refrigeration system, verify temperature controls";
-                } else if (highSeverityExcursions > 0) {
-                    recommendations = "Action required: Review temperature monitoring, check equipment";
-                } else if (mediumSeverityExcursions > 0) {
-                    recommendations = "Monitor closely: Consider preventive maintenance";
-                } else if (tripExcursions.size() > 0) {
-                    recommendations = "Minor issues: Continue monitoring, consider optimization";
-        } else {
-                    recommendations = "Excellent performance: Maintain current practices";
-                }
-
-                bufferedWriter.write("Recommendations,Action Required," + recommendations + ",,\n");
-                bufferedWriter.write("Recommendations,Next Review,Within 24 hours,,\n");
-            }
-
-            bufferedWriter.close();
-            writer.close();
-
-            Log.d("BeaconRawData", "Comprehensive trip summary CSV generated: " + csvFile.getAbsolutePath());
-
-        } catch (Exception e) {
-            Log.e("BeaconRawData", "Error generating trip summary CSV: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
     private void processHistoricalDataForTripDetectionParallel(List<HtData> htDataList) {
         if (htDataList == null || htDataList.isEmpty()) {
             Log.d("BeaconRawData", "No data to process");
-            isDataProcessingComplete = true;
+        isDataProcessingComplete = true;
             cleanupDeviceConnection();
             return;
         }
         
-        // Use the correct trip detection logic for parallel approach
         List<HtData> tripData = new ArrayList<>();
         List<ExcursionData> tripExcursions = new ArrayList<>();
 
-        // Find the latest excursion with no normal after it (going backwards)
         int latestExcursionIndex = -1;
+        int lastNormalIndex = -1;
 
-        // Process from latest (current time) to oldest
+        // Find the latest excursion point
         for (int i = htDataList.size() - 1; i >= 0; i--) {
             HtData htData = htDataList.get(i);
             float temperature = htData.getTemperature();
             boolean isNormal = (temperature >= 2.0f && temperature <= 8.0f);
-            
+
             if (!isNormal) {
-                // Found an excursion - mark it as potential trip start
                 latestExcursionIndex = i;
-            } else {
-                // Found a normal reading - this invalidates any excursions before it
-                // The excursion we found before this normal is our trip start
-                break; // Stop here - no need to continue
-            }
+                break;
+        }
         }
 
-        // Extract trip data: from latest excursion to current time
+        // If we found an excursion, find the last normal temperature point before it
         if (latestExcursionIndex != -1) {
-            // Trip data: from latest excursion to current time
-            tripData = htDataList.subList(latestExcursionIndex, htDataList.size());
-
-            // Find all excursions within the trip period
-            for (HtData htData : tripData) {
+            // Search backwards from the excursion point to find the last normal temperature
+            for (int i = latestExcursionIndex - 1; i >= 0; i--) {
+                HtData htData = htDataList.get(i);
                 float temperature = htData.getTemperature();
-                if (temperature < 2.0f || temperature > 8.0f) {
-                    tripExcursions.add(new ExcursionData(temperature, htData.getTimestamps(),
-                        temperature < 2.0f ? "LOW" : "HIGH", mst03Entity.getMacAddress()));
+                boolean isNormal = (temperature >= 2.0f && temperature <= 8.0f);
+
+                if (isNormal) {
+                    lastNormalIndex = i;
+                    break;
                 }
             }
 
-            long tripDurationMinutes = tripData.isEmpty() ? 0 : 
-                (tripData.get(tripData.size() - 1).getTimestamps() - tripData.get(0).getTimestamps()) / (1000 * 60);
+            // If we found a normal point, start from there; otherwise start from excursion point
+            int startIndex = (lastNormalIndex != -1) ? lastNormalIndex : latestExcursionIndex;
+            tripData = htDataList.subList(startIndex, htDataList.size());
 
-            Log.d("BeaconRawData", "Parallel trip detected: " + tripData.size() + " records from index " +
-                latestExcursionIndex + " to " + (htDataList.size() - 1) +
-                " with " + tripExcursions.size() + " excursions. Duration: " + tripDurationMinutes + " minutes");
+            // Only count excursions from the excursion point onwards
+            for (int i = latestExcursionIndex; i < htDataList.size(); i++) {
+                HtData htData = htDataList.get(i);
+                float temperature = htData.getTemperature();
+                if (temperature < 2.0f || temperature > 8.0f) {
+                    tripExcursions.add(new ExcursionData(temperature, htData.getTimestamps(),
+                            temperature < 2.0f ? "LOW" : "HIGH", mst03Entity.getMacAddress()));
+                }
+            }
+
+            long tripDurationMinutes = tripData.isEmpty() ? 0
+                    : (tripData.get(tripData.size() - 1).getTimestamps() - tripData.get(0).getTimestamps())
+                            / (1000 * 60);
+
+            String startPoint = (lastNormalIndex != -1) ? "last normal point (index " + lastNormalIndex + ")" : "excursion start (index " + latestExcursionIndex + ")";
+            Log.d("BeaconRawData", "Parallel trip detected: " + tripData.size() + " records starting from " + startPoint +
+                    " to " + (htDataList.size() - 1) + " with " + tripExcursions.size() + " excursions. Duration: " + tripDurationMinutes + " minutes");
         } else {
-            // No excursion found - use recent data (last 1000 records or all if less)
+            // No excursion found, use recent data
             int startIndex = Math.max(0, htDataList.size() - 1000);
             tripData = htDataList.subList(startIndex, htDataList.size());
             Log.d("BeaconRawData", "No excursion trip found, using recent " + tripData.size() + " records");
@@ -1924,47 +1667,58 @@ public class ScanDevicesListActivity extends BaseActivity {
         List<HtData> tripData = new ArrayList<>();
         List<ExcursionData> tripExcursions = new ArrayList<>();
 
-        // Find the latest excursion with no normal after it (going backwards)
         int latestExcursionIndex = -1;
+        int lastNormalIndex = -1;
 
-        // Process from latest (current time) to oldest
+        // Find the latest excursion point
         for (int i = htDataList.size() - 1; i >= 0; i--) {
             HtData htData = htDataList.get(i);
             float temperature = htData.getTemperature();
             boolean isNormal = (temperature >= 2.0f && temperature <= 8.0f);
-            
+
             if (!isNormal) {
-                // Found an excursion - mark it as potential trip start
                 latestExcursionIndex = i;
-        } else {
-                // Found a normal reading - this invalidates any excursions before it
-                // The excursion we found before this normal is our trip start
-                break; // Stop here - no need to continue
-            }
+                break;
+        }
         }
 
-        // Extract trip data: from latest excursion to current time
+        // If we found an excursion, find the last normal temperature point before it
         if (latestExcursionIndex != -1) {
-            // Trip data: from latest excursion to current time
-            tripData = htDataList.subList(latestExcursionIndex, htDataList.size());
-
-            // Find all excursions within the trip period
-            for (HtData htData : tripData) {
+            // Search backwards from the excursion point to find the last normal temperature
+            for (int i = latestExcursionIndex - 1; i >= 0; i--) {
+                HtData htData = htDataList.get(i);
                 float temperature = htData.getTemperature();
-                if (temperature < 2.0f || temperature > 8.0f) {
-                    tripExcursions.add(new ExcursionData(temperature, htData.getTimestamps(),
-                        temperature < 2.0f ? "LOW" : "HIGH", mst03Entity.getMacAddress()));
+                boolean isNormal = (temperature >= 2.0f && temperature <= 8.0f);
+
+                if (isNormal) {
+                    lastNormalIndex = i;
+                    break;
                 }
             }
 
-            long tripDurationMinutes = tripData.isEmpty() ? 0 : 
-                (tripData.get(tripData.size() - 1).getTimestamps() - tripData.get(0).getTimestamps()) / (1000 * 60);
+            // If we found a normal point, start from there; otherwise start from excursion point
+            int startIndex = (lastNormalIndex != -1) ? lastNormalIndex : latestExcursionIndex;
+            tripData = htDataList.subList(startIndex, htDataList.size());
 
-            Log.d("BeaconRawData", "Trip detected: " + tripData.size() + " records from index " +
-                latestExcursionIndex + " to " + (htDataList.size() - 1) +
-                " with " + tripExcursions.size() + " excursions. Duration: " + tripDurationMinutes + " minutes");
+            // Only count excursions from the excursion point onwards
+            for (int i = latestExcursionIndex; i < htDataList.size(); i++) {
+                HtData htData = htDataList.get(i);
+                float temperature = htData.getTemperature();
+                if (temperature < 2.0f || temperature > 8.0f) {
+                    tripExcursions.add(new ExcursionData(temperature, htData.getTimestamps(),
+                            temperature < 2.0f ? "LOW" : "HIGH", mst03Entity.getMacAddress()));
+                }
+            }
+
+            long tripDurationMinutes = tripData.isEmpty() ? 0
+                    : (tripData.get(tripData.size() - 1).getTimestamps() - tripData.get(0).getTimestamps())
+                            / (1000 * 60);
+
+            String startPoint = (lastNormalIndex != -1) ? "last normal point (index " + lastNormalIndex + ")" : "excursion start (index " + latestExcursionIndex + ")";
+            Log.d("BeaconRawData", "Trip detected: " + tripData.size() + " records starting from " + startPoint +
+                    " to " + (htDataList.size() - 1) + " with " + tripExcursions.size() + " excursions. Duration: " + tripDurationMinutes + " minutes");
         } else {
-            // No excursion found - use recent data (last 1000 records or all if less)
+            // No excursion found, use recent data
             int startIndex = Math.max(0, htDataList.size() - 1000);
             tripData = htDataList.subList(startIndex, htDataList.size());
             Log.d("BeaconRawData", "No excursion trip found, using recent " + tripData.size() + " records");
@@ -1973,37 +1727,32 @@ public class ScanDevicesListActivity extends BaseActivity {
         storeProcessedDataOptimized(tripData, tripExcursions);
     }
 
-    // Generate all CSV files for testing
     private void generateAllCSVFiles(List<HtData> tripData, List<ExcursionData> tripExcursions) {
         updateProcessingStatus("Uploading");
-        
-        // Generate main trip data CSV only
+
         generateTripDataCSV(tripData, tripExcursions);
-        
+
         updateProcessingStatus("Completed");
-        
+
         Log.d("BeaconRawData", "Trip Data CSV file generated successfully");
-        
+
             runOnUiThread(() -> {
-            Toast.makeText(this, "Trip Data CSV generated successfully", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Trip Data CSV generated successfully in Downloads folder", Toast.LENGTH_LONG).show();
         });
     }
 
-    // Manual CSV generation for testing (can be called from UI)
     public void generateCSVForCurrentData() {
         if (processedHistoricalData.isEmpty()) {
             Toast.makeText(this, "No trip data available. Please connect to a device first.", Toast.LENGTH_LONG).show();
             return;
         }
-
+        
         List<HtData> tripData = new ArrayList<>(processedHistoricalData);
         List<ExcursionData> tripExcursions = new ArrayList<>(processedExcursionData);
 
-        // Generate only the Trip Data CSV
         generateTripDataCSV(tripData, tripExcursions);
     }
 
-    // Get list of generated CSV files
     public List<String> getGeneratedCSVFiles() {
         List<String> csvFiles = new ArrayList<>();
 
@@ -2024,7 +1773,6 @@ public class ScanDevicesListActivity extends BaseActivity {
         return csvFiles;
     }
 
-    // Share CSV file
     public void shareCSVFile(String fileName) {
         try {
             java.io.File externalDir = getExternalFilesDir(null);
@@ -2037,20 +1785,19 @@ public class ScanDevicesListActivity extends BaseActivity {
             if (!csvFile.exists()) {
                 Toast.makeText(this, "CSV file not found: " + fileName, Toast.LENGTH_SHORT).show();
                 return;
-            }
-
-            // Create share intent
+        }
+        
             android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(
-                this, 
-                getPackageName() + ".fileprovider", 
+                    this,
+                    getPackageName() + ".fileprovider",
                     csvFile);
-            
+
             Intent shareIntent = new Intent(Intent.ACTION_SEND);
             shareIntent.setType("text/csv");
             shareIntent.putExtra(Intent.EXTRA_STREAM, uri);
             shareIntent.putExtra(Intent.EXTRA_SUBJECT, "Trip Data CSV: " + fileName);
             shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            
+
             startActivity(Intent.createChooser(shareIntent, "Share CSV File"));
 
         } catch (Exception e) {
@@ -2059,17 +1806,15 @@ public class ScanDevicesListActivity extends BaseActivity {
         }
     }
 
-    // Save file to Downloads directory (accessible in Android 15)
     private java.io.File saveToDownloadsDirectory(String fileName) {
         try {
-            // Check if we have storage permissions
+
             if (!hasStoragePermissions()) {
                 Log.w("BeaconRawData", "Storage permissions not granted, requesting...");
                 requestStoragePermissions();
                 return null;
             }
 
-            // Try to get Downloads directory
             java.io.File downloadsDir = android.os.Environment
                     .getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS);
 
@@ -2077,7 +1822,7 @@ public class ScanDevicesListActivity extends BaseActivity {
                 java.io.File csvFile = new java.io.File(downloadsDir, fileName);
                 Log.d("BeaconRawData", "Saving CSV to Downloads: " + csvFile.getAbsolutePath());
                 return csvFile;
-            } else {
+        } else {
                 Log.w("BeaconRawData", "Downloads directory not accessible, will use fallback");
                 return null;
             }
@@ -2087,45 +1832,42 @@ public class ScanDevicesListActivity extends BaseActivity {
         }
     }
 
-    // Check if storage permissions are granted
     private boolean hasStoragePermissions() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            // For Android 11+ (API 30+), check MANAGE_EXTERNAL_STORAGE permission
+
             try {
                 return android.os.Environment.isExternalStorageManager();
-        } catch (Exception e) {
+            } catch (Exception e) {
                 Log.e("BeaconRawData", "Error checking storage permissions: " + e.getMessage());
                 return false;
             }
         } else {
-            // For older versions, check traditional permissions
+
             return checkSelfPermission(
                     android.Manifest.permission.WRITE_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED;
         }
     }
-
-    // Request storage permissions
+    
     private void requestStoragePermissions() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            // For Android 11+ (API 30+), request MANAGE_EXTERNAL_STORAGE
+
             try {
                 Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
                 intent.addCategory("android.intent.category.DEFAULT");
                 intent.setData(
                         android.net.Uri.parse(String.format("package:%s", getApplicationContext().getPackageName())));
                 startActivityForResult(intent, 1002);
-            } catch (Exception e) {
-                // Fallback to general storage settings
+        } catch (Exception e) {
+
                 Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
                 startActivityForResult(intent, 1002);
             }
         } else {
-            // For older versions, request traditional permissions
+
             requestPermissions(new String[] { android.Manifest.permission.WRITE_EXTERNAL_STORAGE }, 1003);
         }
     }
-
-    // Handle permission result
+    
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -2133,7 +1875,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         if (requestCode == 1003) {
             if (grantResults.length > 0 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 Log.d("BeaconRawData", "Storage permission granted");
-                // Retry CSV generation
+
                 if (!processedHistoricalData.isEmpty()) {
                     generateCSVForCurrentData();
                 }
@@ -2147,7 +1889,6 @@ public class ScanDevicesListActivity extends BaseActivity {
         }
     }
 
-    // Status management methods
     private static void updateProcessingStatus(String status) {
         currentProcessingStatus = status;
         Log.d("BeaconRawData", "Processing status updated: " + status);
@@ -2155,6 +1896,6 @@ public class ScanDevicesListActivity extends BaseActivity {
 
     public static String getCurrentProcessingStatus() {
         return currentProcessingStatus;
-    }
+            }
 
 }

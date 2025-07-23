@@ -219,7 +219,7 @@
                     android:id="@+id/tv_scan_device_mac"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="MAC: C3:00:00:30:18:F6"
+                    android:text="C3:00:00:30:18:F6"
                     android:textColor="@color/text_primary"
                     android:textSize="14sp"
                     android:layout_marginBottom="8dp" />
