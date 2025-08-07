@@ -525,35 +525,46 @@ public class ScanDevicesListActivity extends BaseActivity {
         Log.d("ScanDebug",
                 "Returning to scan screen, preserving temperature cache with " + temperatureCache.size() + " entries");
 
-        ensureBleManagerReady();
+        // Only initialize BLE services if permissions are granted
+        if (permissionsGranted) {
+            ensureBleManagerReady();
 
-        bleReadyHandler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                startScan();
-            }
-        }, 1000);
-        
-        // Register Bluetooth state receiver
-        registerBluetoothStateReceiver();
+            bleReadyHandler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    startScan();
+                }
+            }, 1000);
+            
+            // Register Bluetooth state receiver
+            registerBluetoothStateReceiver();
+        }
     }
     
     @Override
     protected void onResume() {
         super.onResume();
-        setBleManagerListener();
         
-        // NEW: Start aggressive foreground scanning for faster temperature data
-        startForegroundScan();
+        // Only start BLE services if permissions are granted
+        if (permissionsGranted) {
+            setBleManagerListener();
+            
+            // NEW: Start aggressive foreground scanning for faster temperature data
+            startForegroundScan();
+        }
     }
     
     @Override
     protected void onPause() {
         super.onPause();
-        removeBleManagerListener();
         
-        // Stop foreground scanning when leaving the screen
-        stopForegroundScan();
+        // Only stop BLE services if permissions are granted
+        if (permissionsGranted) {
+            removeBleManagerListener();
+            
+            // Stop foreground scanning when leaving the screen
+            stopForegroundScan();
+        }
     }
 
     @Override
@@ -1438,6 +1449,37 @@ public class ScanDevicesListActivity extends BaseActivity {
         startService(resumeIntent);
     }
 
+    /**
+     * Initialize all BLE services after permissions are granted
+     */
+    private void initializeBleServices() {
+        try {
+            Log.d("ScanDevicesList", "Initializing BLE services");
+            
+            // Initialize UI components
+            initAnimator();
+            
+            // Initialize BLE manager
+            initBleManager();
+            
+            // Check Bluetooth state and start scanning
+            checkoutBluetooth();
+            
+            // Start background scan service
+            startBackgroundScanService();
+            
+            // Register Bluetooth state receiver if activity is active
+            if (!isFinishing() && !isDestroyed()) {
+                registerBluetoothStateReceiver();
+            }
+            
+            Log.d("ScanDevicesList", "BLE services initialized successfully");
+        } catch (Exception e) {
+            Log.e("ScanDevicesList", "Error initializing BLE services: " + e.getMessage(), e);
+            Toast.makeText(this, "Error initializing Bluetooth services: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
     private void initBlePermission() {
         String[] requestPermissionList;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -1473,13 +1515,10 @@ public class ScanDevicesListActivity extends BaseActivity {
                             @NonNull List<String> deniedList) {
                         permissionsGranted = allGranted;
                         if (allGranted) {
-
-                            initAnimator();
-                            initBleManager();
-                            checkoutBluetooth();
-
-                            startBackgroundScanService();
+                            Log.d("ScanDevicesList", "All permissions granted, initializing BLE services");
+                            initializeBleServices();
                         } else {
+                            Log.w("ScanDevicesList", "Some permissions denied: " + deniedList);
                             Toast.makeText(ScanDevicesListActivity.this,
                                     "The following permissions are denied. BLE scanning will not work.",
                                     Toast.LENGTH_LONG).show();
@@ -2692,11 +2731,18 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
 
     private void registerBluetoothStateReceiver() {
-        if (bluetoothStateReceiver != null && !isFinishing() && !isDestroyed()) {
+        // Only register if permissions are granted and activity is active
+        if (!permissionsGranted || isFinishing() || isDestroyed()) {
+            Log.d("ScanDevicesList", "Skipping Bluetooth receiver registration - permissions not granted or activity inactive");
+            return;
+        }
+        
+        if (bluetoothStateReceiver != null) {
             try {
                 IntentFilter filter = new IntentFilter();
                 filter.addAction(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED);
                 registerReceiver(bluetoothStateReceiver, filter);
+                Log.d("ScanDevicesList", "Bluetooth state receiver registered successfully");
             } catch (Exception e) {
                 Log.e("ScanDevicesList", "Error registering Bluetooth receiver: " + e.getMessage(), e);
             }
