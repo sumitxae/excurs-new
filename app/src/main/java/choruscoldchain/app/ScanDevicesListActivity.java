@@ -117,6 +117,10 @@ public class ScanDevicesListActivity extends BaseActivity {
     private boolean permissionsGranted = false;
     private ImageView ivChorusLogo;
     private boolean isInitialScan = true;
+    
+    // NEW: Add faster direct scanning for foreground
+    private boolean isForegroundScanning = false;
+    private static final int FOREGROUND_SCAN_DURATION = 3000; // 3 seconds for quick temperature discovery
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -533,6 +537,24 @@ public class ScanDevicesListActivity extends BaseActivity {
         // Register Bluetooth state receiver
         registerBluetoothStateReceiver();
     }
+    
+    @Override
+    protected void onResume() {
+        super.onResume();
+        setBleManagerListener();
+        
+        // NEW: Start aggressive foreground scanning for faster temperature data
+        startForegroundScan();
+    }
+    
+    @Override
+    protected void onPause() {
+        super.onPause();
+        removeBleManagerListener();
+        
+        // Stop foreground scanning when leaving the screen
+        stopForegroundScan();
+    }
 
     @Override
     protected void onStop() {
@@ -634,11 +656,14 @@ public class ScanDevicesListActivity extends BaseActivity {
         isConnecting = true;
         mst03Entity = device;
         
+        // Stop foreground scanning during connection
+        stopForegroundScan();
+        
         // Disable all connect buttons during connection
         mDevicesListAdapter.setConnectButtonsEnabled(false);
         
         // Show connection dialog
-        WaitDialog.show();
+        WaitDialog.show("Connecting to device...");
         
         // Start connection with improved timeout handling
         startConnectionWithTimeout(device);
@@ -649,10 +674,6 @@ public class ScanDevicesListActivity extends BaseActivity {
         // Stop background scan service before connecting
         if (isBackgroundServiceRunning()) {
             stopService(new Intent(this, BackgroundScanService.class));
-        }
-        // Stop any direct scans
-        if (mBleManager != null) {
-            mBleManager.stopScan(this);
         }
         
         // Connect to the device
@@ -1231,6 +1252,104 @@ public class ScanDevicesListActivity extends BaseActivity {
         Log.d("ScanDebug", "Connection status: " + status);
         // You can add UI updates here if needed
     }
+    
+    /**
+     * NEW: Start aggressive foreground scanning for faster temperature data discovery
+     */
+    private void startForegroundScan() {
+        if (!permissionsGranted || mBleManager == null) return;
+        
+        Log.d("ScanDebug", "Starting foreground scan for faster temperature discovery");
+        
+        try {
+            isForegroundScanning = true;
+            
+            // Stop background service temporarily to avoid conflicts
+            pauseBackgroundService();
+            
+            // Start foreground scan with shorter duration for quicker updates
+            mBleManager.startScan(this, FOREGROUND_SCAN_DURATION, new OnScanDevicesResultListener<MST03Entity>() {
+                @Override
+                public void onScanResult(List<MST03Entity> list) {
+                    Log.d("ScanDebug", "Foreground scan result: " + list.size() + " devices");
+                    
+                    if (list.size() > 0) {
+                        // Update devices immediately
+                        updateAllDiscoveredDevices(list);
+                        
+                        // Update UI based on current search mode
+                        if (isSearchMode && binding.etSearch.getText().toString().trim().length() > 0) {
+                            String currentSearchText = binding.etSearch.getText().toString().trim();
+                            filterDevices(currentSearchText);
+                        } else {
+                            mDevicesListAdapter.setList(allDiscoveredDevices);
+                            mDevicesListAdapter.notifyDataSetChanged();
+                        }
+                        
+                        // Also update the device manager for background service
+                        deviceManager.updateDevices(list);
+                    }
+                }
+
+                @Override
+                public void onStopScan(List<MST03Entity> list) {
+                    Log.d("ScanDebug", "Foreground scan stopped");
+                    
+                    if (isForegroundScanning) {
+                        // Restart foreground scan immediately if we're still active
+                        new Handler().postDelayed(() -> {
+                            if (isForegroundScanning && !isConnecting) {
+                                startForegroundScan();
+                            }
+                        }, 500); // Very short delay for continuous scanning
+                    }
+                }
+            });
+            
+        } catch (Exception e) {
+            Log.e("ScanDebug", "Error starting foreground scan: " + e.getMessage());
+            isForegroundScanning = false;
+            // Resume background service if foreground scan fails
+            resumeBackgroundService();
+        }
+    }
+    
+    /**
+     * NEW: Stop foreground scanning and resume background service
+     */
+    private void stopForegroundScan() {
+        Log.d("ScanDebug", "Stopping foreground scan");
+        isForegroundScanning = false;
+        
+        if (mBleManager != null) {
+            try {
+                mBleManager.stopScan(this);
+            } catch (Exception e) {
+                Log.e("ScanDebug", "Error stopping foreground scan: " + e.getMessage());
+            }
+        }
+        
+        // Resume background service
+        resumeBackgroundService();
+    }
+    
+    /**
+     * NEW: Pause background scanning service
+     */
+    private void pauseBackgroundService() {
+        Intent pauseIntent = new Intent(this, BackgroundScanService.class);
+        pauseIntent.setAction("PAUSE_SCAN");
+        startService(pauseIntent);
+    }
+    
+    /**
+     * NEW: Resume background scanning service
+     */
+    private void resumeBackgroundService() {
+        Intent resumeIntent = new Intent(this, BackgroundScanService.class);
+        resumeIntent.setAction("RESUME_SCAN");
+        startService(resumeIntent);
+    }
 
     private void initBlePermission() {
         String[] requestPermissionList;
@@ -1303,29 +1422,28 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
 
     private void startScan() {
-        Log.d("ScanOptimization", "startScan called - permissionsGranted: " + permissionsGranted +
-                ", mObjectAnimator: " + (mObjectAnimator != null) + ", isInitialScan: " + isInitialScan);
-
-        if (mObjectAnimator != null) {
-            mObjectAnimator.start();
-            Log.d("ScanOptimization", "Animation started");
+        if (!permissionsGranted || mObjectAnimator == null) return;
+        
+        // Check if we're in foreground or background
+        if (isResumed()) {
+            // Foreground - use fast direct scanning
+            startForegroundScan();
         } else {
-            Log.w("ScanOptimization", "mObjectAnimator is null, cannot start animation");
+            // Background - use background service
+            if (isBackgroundServiceRunning()) {
+                resumeBackgroundService();
+            } else {
+                startBackgroundScanService();
+            }
         }
-
-        if (isBackgroundServiceRunning()) {
-            Log.d("ScanOptimization", "Background service already running");
-        } else {
-            Log.d("ScanOptimization", "Starting background scan service");
-            startBackgroundScanService();
-        }
-
-        if (permissionsGranted && deviceManager != null) {
-            Log.d("ScanOptimization", "Device discovery ready - waiting for broadcast data");
-        } else {
-            Log.w("ScanOptimization", "Cannot start device discovery - permissions: " + permissionsGranted +
-                    ", deviceManager: " + (deviceManager != null));
-        }
+        
+        // Start the animation to show scanning is active
+        mObjectAnimator.start();
+    }
+    
+    // Helper method to check if activity is resumed
+    private boolean isResumed() {
+        return !isFinishing() && !isDestroyed();
     }
 
     private void updateAllDiscoveredDevices(List<MST03Entity> newDevices) {
