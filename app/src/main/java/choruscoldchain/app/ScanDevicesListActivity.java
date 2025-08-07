@@ -1055,9 +1055,12 @@ public class ScanDevicesListActivity extends BaseActivity {
             Log.d("BeaconRawData", "Sample data " + i + ": " + htData.toString());
         }
 
-        // Find the last excursion start (last transition from normal to excursion)
+        // Find the last excursion start and determine graph data range
         int lastExcursionStartIndex = -1;
+        int lastNormalBeforeExcursionIndex = -1;
         boolean wasInNormalRange = false;
+        
+        // First pass: find the last excursion start
         for (int i = 0; i < htDataList.size(); i++) {
             float temp = htDataList.get(i).getTemperature();
             boolean isNormal = (temp >= 2.0f && temp <= 8.0f);
@@ -1067,14 +1070,34 @@ public class ScanDevicesListActivity extends BaseActivity {
             wasInNormalRange = isNormal;
         }
         
-        // If found, filter data from that point onward; else use all data
-        List<HtData> filteredData;
+        // Second pass: find the last normal point before excursion (if excursion exists)
         if (lastExcursionStartIndex != -1) {
+            for (int i = lastExcursionStartIndex - 1; i >= 0; i--) {
+                float temp = htDataList.get(i).getTemperature();
+                boolean isNormal = (temp >= 2.0f && temp <= 8.0f);
+                if (isNormal) {
+                    lastNormalBeforeExcursionIndex = i;
+                    break;
+                }
+            }
+        }
+        
+        // Determine the data range for graph display
+        List<HtData> filteredData;
+        if (lastExcursionStartIndex != -1 && lastNormalBeforeExcursionIndex != -1) {
+            // Start from just before the excursion (last normal point)
+            int startIndex = Math.max(0, lastNormalBeforeExcursionIndex);
+            filteredData = htDataList.subList(startIndex, htDataList.size());
+            Log.d("BeaconRawData", "Graph data: Starting from just before excursion (index " + startIndex + "): " + filteredData.size() + " records");
+        } else if (lastExcursionStartIndex != -1) {
+            // Excursion found but no normal point before it, start from excursion
             filteredData = htDataList.subList(lastExcursionStartIndex, htDataList.size());
-            Log.d("BeaconRawData", "Filtered data from excursion start: " + filteredData.size() + " records");
+            Log.d("BeaconRawData", "Graph data: Starting from excursion (no normal point before): " + filteredData.size() + " records");
         } else {
-            filteredData = htDataList;
-            Log.d("BeaconRawData", "Using all data: " + filteredData.size() + " records");
+            // No excursion found, use latest 1000 records
+            int startIndex = Math.max(0, htDataList.size() - 1000);
+            filteredData = htDataList.subList(startIndex, htDataList.size());
+            Log.d("BeaconRawData", "Graph data: No excursion found, using latest " + filteredData.size() + " records (from index " + startIndex + ")");
         }
 
         // Store the complete dataset for CSV generation
@@ -1856,62 +1879,67 @@ public class ScanDevicesListActivity extends BaseActivity {
             return;
         }
 
-        // Normal temperature found - proceed with excursion detection
-        int latestExcursionIndex = -1;
-        int lastNormalIndex = -1;
-
-        for (int i = htDataList.size() - 1; i >= 0; i--) {
-            HtData htData = htDataList.get(i);
-            float temperature = htData.getTemperature();
-            boolean isNormal = (temperature >= 2.0f && temperature <= 8.0f);
-
-            if (!isNormal) {
-                latestExcursionIndex = i;
-                break;
+        // Find the last excursion start and determine graph data range
+        int lastExcursionStartIndex = -1;
+        int lastNormalBeforeExcursionIndex = -1;
+        boolean wasInNormalRange = false;
+        
+        // First pass: find the last excursion start
+        for (int i = 0; i < htDataList.size(); i++) {
+            float temp = htDataList.get(i).getTemperature();
+            boolean isNormal = (temp >= 2.0f && temp <= 8.0f);
+            if (wasInNormalRange && !isNormal) {
+                lastExcursionStartIndex = i;
             }
+            wasInNormalRange = isNormal;
         }
-
-        if (latestExcursionIndex != -1) {
-
-            for (int i = latestExcursionIndex - 1; i >= 0; i--) {
-                HtData htData = htDataList.get(i);
-                float temperature = htData.getTemperature();
-                boolean isNormal = (temperature >= 2.0f && temperature <= 8.0f);
-
+        
+        // Second pass: find the last normal point before excursion (if excursion exists)
+        if (lastExcursionStartIndex != -1) {
+            for (int i = lastExcursionStartIndex - 1; i >= 0; i--) {
+                float temp = htDataList.get(i).getTemperature();
+                boolean isNormal = (temp >= 2.0f && temp <= 8.0f);
                 if (isNormal) {
-                    lastNormalIndex = i;
+                    lastNormalBeforeExcursionIndex = i;
                     break;
                 }
             }
-
-            int startIndex = (lastNormalIndex != -1) ? lastNormalIndex : latestExcursionIndex;
+        }
+        
+        // Determine the data range for graph display
+        if (lastExcursionStartIndex != -1 && lastNormalBeforeExcursionIndex != -1) {
+            // Start from just before the excursion (last normal point)
+            int startIndex = Math.max(0, lastNormalBeforeExcursionIndex);
             tripData = htDataList.subList(startIndex, htDataList.size());
+            Log.d("BeaconRawData", "Optimized: Starting from just before excursion (index " + startIndex + "): " + tripData.size() + " records");
+        } else if (lastExcursionStartIndex != -1) {
+            // Excursion found but no normal point before it, start from excursion
+            tripData = htDataList.subList(lastExcursionStartIndex, htDataList.size());
+            Log.d("BeaconRawData", "Optimized: Starting from excursion (no normal point before): " + tripData.size() + " records");
+        } else {
+            // No excursion found, use latest 1000 records
+            int startIndex = Math.max(0, htDataList.size() - 1000);
+            tripData = htDataList.subList(startIndex, htDataList.size());
+            Log.d("BeaconRawData", "Optimized: No excursion found, using latest " + tripData.size() + " records (from index " + startIndex + ")");
+        }
 
-            for (int i = latestExcursionIndex; i < htDataList.size(); i++) {
-                HtData htData = htDataList.get(i);
-                float temperature = htData.getTemperature();
-                if (temperature < 2.0f || temperature > 8.0f) {
-                    tripExcursions.add(new ExcursionData(temperature, htData.getTimestamps(),
-                            temperature < 2.0f ? "LOW" : "HIGH", mst03Entity.getMacAddress()));
-                }
+        // Find excursions in the selected data range
+        for (int i = 0; i < tripData.size(); i++) {
+            HtData htData = tripData.get(i);
+            float temperature = htData.getTemperature();
+            if (temperature < 2.0f || temperature > 8.0f) {
+                tripExcursions.add(new ExcursionData(temperature, htData.getTimestamps(),
+                        temperature < 2.0f ? "LOW" : "HIGH", mst03Entity.getMacAddress()));
             }
+        }
 
             long tripDurationMinutes = tripData.isEmpty() ? 0
                     : (tripData.get(tripData.size() - 1).getTimestamps() - tripData.get(0).getTimestamps())
                             / (1000 * 60);
 
-            String startPoint = (lastNormalIndex != -1) ? "last normal point (index " + lastNormalIndex + ")"
-                    : "excursion start (index " + latestExcursionIndex + ")";
             Log.d("BeaconRawData",
-                    "Optimized trip detected: " + tripData.size() + " records starting from " + startPoint +
-                            " to " + (htDataList.size() - 1) + " with " + tripExcursions.size()
+                    "Optimized trip detected: " + tripData.size() + " records with " + tripExcursions.size()
                             + " excursions. Duration: " + tripDurationMinutes + " minutes");
-        } else {
-            // No excursion found but normal temperature exists - use recent data
-            int startIndex = Math.max(0, htDataList.size() - 1000);
-            tripData = htDataList.subList(startIndex, htDataList.size());
-            Log.d("BeaconRawData", "No excursion trip found, using recent " + tripData.size() + " records");
-        }
 
         storeProcessedDataOptimized(tripData, tripExcursions);
     }
