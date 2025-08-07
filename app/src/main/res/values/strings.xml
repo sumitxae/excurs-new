@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">CCP-Excursion-reader</string>
+    <string name="app_name">ChorusColdChain</string>
     <string name="scan_device">scan devices</string>
     <string name="device_connected">connected device</string>
     <string name="device_connected_successfully">The device is connected successfully</string>
