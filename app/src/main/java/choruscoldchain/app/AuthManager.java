@@ -28,7 +28,7 @@ public class AuthManager {
     private final Gson gson;
     
     // Base URL for your API - update this to match your backend
-    private static final String BASE_URL = "http://51.21.86.14:8000/v1/";
+    private static final String BASE_URL = "http://34.61.53.179:8000/v1/";
     
     private AuthManager(Context context) {
         this.context = context.getApplicationContext();
@@ -61,16 +61,24 @@ public class AuthManager {
     public void initLogin(String email, AuthCallback<AuthModels.InitLoginResponse> callback) {
         AuthModels.InitLoginRequest request = new AuthModels.InitLoginRequest(email);
         
+        Log.d(TAG, "Initiating login for email: " + email);
+        Log.d(TAG, "Making request to: " + BASE_URL + "auth/initLogin");
+        
         apiService.initLogin(request).enqueue(new Callback<AuthModels.InitLoginResponse>() {
             @Override
             public void onResponse(Call<AuthModels.InitLoginResponse> call, Response<AuthModels.InitLoginResponse> response) {
+                Log.d(TAG, "Response received - Status: " + response.code());
+                Log.d(TAG, "Response headers: " + response.headers());
+                
                 if (response.isSuccessful() && response.body() != null) {
+                    Log.d(TAG, "Login initialization successful");
                     callback.onSuccess(response.body());
                 } else {
                     String errorMessage = "Failed to initialize login";
                     try {
                         if (response.errorBody() != null) {
                             String errorBody = response.errorBody().string();
+                            Log.e(TAG, "Error response body: " + errorBody);
                             // Try to parse error message from response
                             try {
                                 AuthModels.InitLoginResponse errorResponse = gson.fromJson(errorBody, AuthModels.InitLoginResponse.class);
@@ -272,6 +280,53 @@ public class AuthManager {
             @Override
             public void onFailure(Call<AuthModels.InitPasswordResponse> call, Throwable t) {
                 Log.e(TAG, "Network error during password initialization", t);
+                callback.onError("Network error: " + t.getMessage());
+            }
+        });
+    }
+    
+    public void resetPassword(String newPassword, AuthCallback<AuthModels.ResetPasswordResponse> callback) {
+        String token = getToken();
+        if (token == null) {
+            callback.onError("No authentication token available");
+            return;
+        }
+        
+        AuthModels.ResetPasswordRequest request = new AuthModels.ResetPasswordRequest(newPassword);
+        String authorization = "Bearer " + token;
+        
+        apiService.resetPassword(authorization, request).enqueue(new Callback<AuthModels.ResetPasswordResponse>() {
+            @Override
+            public void onResponse(Call<AuthModels.ResetPasswordResponse> call, Response<AuthModels.ResetPasswordResponse> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    AuthModels.ResetPasswordResponse resetPasswordResponse = response.body();
+                    callback.onSuccess(resetPasswordResponse);
+                } else {
+                    String errorMessage = "Failed to reset password";
+                    try {
+                        if (response.errorBody() != null) {
+                            String errorBody = response.errorBody().string();
+                            // Try to parse error message from response
+                            try {
+                                AuthModels.ResetPasswordResponse errorResponse = gson.fromJson(errorBody, AuthModels.ResetPasswordResponse.class);
+                                if (errorResponse != null && errorResponse.getMessage() != null) {
+                                    errorMessage = errorResponse.getMessage();
+                                }
+                            } catch (Exception e) {
+                                // If parsing fails, use raw error body
+                                errorMessage = errorBody;
+                            }
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error parsing error response", e);
+                    }
+                    callback.onError(errorMessage);
+                }
+            }
+            
+            @Override
+            public void onFailure(Call<AuthModels.ResetPasswordResponse> call, Throwable t) {
+                Log.e(TAG, "Network error during password reset", t);
                 callback.onError("Network error: " + t.getMessage());
             }
         });

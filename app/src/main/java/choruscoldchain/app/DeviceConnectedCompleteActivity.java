@@ -3,7 +3,9 @@ package choruscoldchain.app;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -69,6 +71,10 @@ public class DeviceConnectedCompleteActivity extends BaseActivity{
 
     private AdvParametersConfiguration deviceInfoAdvParametersConfiguration = null;
     private AdvParametersConfiguration combinationAdvParametersConfiguration = null;
+    
+    // Bluetooth state monitoring
+    private BluetoothStateReceiver bluetoothStateReceiver;
+    private AlertDialog bluetoothOffDialog;
 
 
     @Override
@@ -81,6 +87,17 @@ public class DeviceConnectedCompleteActivity extends BaseActivity{
         initData();
         // Remove all old button listeners
         // TODO: Add Download Data button logic here if needed
+        
+        // Initialize Bluetooth state monitoring
+        initBluetoothStateMonitoring();
+    }
+    
+    @Override
+    protected void onStart() {
+        super.onStart();
+        
+        // Register Bluetooth state receiver
+        registerBluetoothStateReceiver();
     }
 
 
@@ -89,6 +106,14 @@ public class DeviceConnectedCompleteActivity extends BaseActivity{
     protected void onDestroy() {
         super.onDestroy();
         disConnected();
+        
+        // Unregister Bluetooth state receiver
+        unregisterBluetoothStateReceiver();
+        
+        // Dismiss dialog if showing
+        if (bluetoothOffDialog != null && bluetoothOffDialog.isShowing()) {
+            bluetoothOffDialog.dismiss();
+        }
     }
 
     private void initToolBar(){
@@ -223,8 +248,8 @@ public class DeviceConnectedCompleteActivity extends BaseActivity{
         //
         List<HTSensorThresholdConfig> htSettingData = new ArrayList<>();
         HTSensorThresholdConfig settingData1 = new HTSensorThresholdConfig();
-        settingData1.setHighTemperature(40f);
-        settingData1.setLowTemperature(5f);
+        settingData1.setHighTemperature(8f);
+        settingData1.setLowTemperature(2f);
         settingData1.setHighHumidity(-128f);
         settingData1.setLowHumidity(-128f);
         //humidity range: 0%-100% Invalid value:-128f
@@ -639,5 +664,119 @@ public class DeviceConnectedCompleteActivity extends BaseActivity{
                 ).show();
             }
         });
+    }
+    
+    // Bluetooth state monitoring methods
+    private void initBluetoothStateMonitoring() {
+        bluetoothStateReceiver = new BluetoothStateReceiver(new BluetoothStateReceiver.BluetoothStateListener() {
+            @Override
+            public void onBluetoothTurnedOff() {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!isFinishing() && !isDestroyed()) {
+                            showBluetoothOffDialog();
+                        }
+                    }
+                });
+            }
+
+            @Override
+            public void onBluetoothTurnedOn() {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!isFinishing() && !isDestroyed()) {
+                            // Dismiss dialog if showing
+                            if (bluetoothOffDialog != null && bluetoothOffDialog.isShowing()) {
+                                bluetoothOffDialog.dismiss();
+                            }
+                            
+                            // Show a toast to inform user
+                            Toast.makeText(DeviceConnectedCompleteActivity.this, 
+                                "Bluetooth is now available", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    private void registerBluetoothStateReceiver() {
+        if (bluetoothStateReceiver != null && !isFinishing() && !isDestroyed()) {
+            try {
+                IntentFilter filter = new IntentFilter();
+                filter.addAction(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED);
+                registerReceiver(bluetoothStateReceiver, filter);
+            } catch (Exception e) {
+                Log.e("DeviceConnectedComplete", "Error registering Bluetooth receiver: " + e.getMessage(), e);
+            }
+        }
+    }
+
+    private void unregisterBluetoothStateReceiver() {
+        if (bluetoothStateReceiver != null) {
+            try {
+                unregisterReceiver(bluetoothStateReceiver);
+            } catch (IllegalArgumentException e) {
+                Log.w("DeviceConnectedComplete", "Bluetooth receiver not registered");
+            } catch (Exception e) {
+                Log.e("DeviceConnectedComplete", "Error unregistering Bluetooth receiver: " + e.getMessage(), e);
+            }
+        }
+    }
+
+    private void showBluetoothOffDialog() {
+        // Check if activity is finishing or destroyed
+        if (isFinishing() || isDestroyed()) {
+            Log.w("DeviceConnectedComplete", "Activity is finishing or destroyed, cannot show dialog");
+            return;
+        }
+
+        // Don't show multiple dialogs
+        if (bluetoothOffDialog != null && bluetoothOffDialog.isShowing()) {
+            return;
+        }
+
+        try {
+            AlertDialog.Builder builder = new AlertDialog.Builder(this);
+            View dialogView = getLayoutInflater().inflate(R.layout.dialog_bluetooth_off, null);
+            builder.setView(dialogView);
+            builder.setCancelable(false);
+
+            bluetoothOffDialog = builder.create();
+            bluetoothOffDialog.show();
+
+            // Set up button click listeners
+            View cancelButton = dialogView.findViewById(R.id.btn_cancel);
+            if (cancelButton != null) {
+                cancelButton.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        if (bluetoothOffDialog != null && bluetoothOffDialog.isShowing()) {
+                            bluetoothOffDialog.dismiss();
+                        }
+                    }
+                });
+            }
+
+            View settingsButton = dialogView.findViewById(R.id.btn_settings);
+            if (settingsButton != null) {
+                settingsButton.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        // Open Bluetooth settings
+                        Intent intent = new Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS);
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                        if (bluetoothOffDialog != null && bluetoothOffDialog.isShowing()) {
+                            bluetoothOffDialog.dismiss();
+                        }
+                    }
+                });
+            }
+        } catch (Exception e) {
+            Log.e("DeviceConnectedComplete", "Error showing Bluetooth dialog: " + e.getMessage(), e);
+        }
     }
 }

@@ -91,6 +91,20 @@ public class ScanDevicesListAdapter extends BaseQuickAdapter<MST03Entity, BaseVi
             Log.d("Scan", "Temperature from CombinationFrame: " + tempValue + "°C");
         }
         
+        // If no valid temperature from device, try to get from cache
+        if (Float.isNaN(tempValue) || tempValue == 0.0f) {
+            // Try to get cached temperature from ScanDevicesListActivity
+            if (getContext() instanceof ScanDevicesListActivity) {
+                ScanDevicesListActivity activity = (ScanDevicesListActivity) getContext();
+                String macAddress = mst03Entity.getMacAddress(); // Assuming macAddress is available here
+                Float cachedTemp = activity.getCachedTemperature(macAddress);
+                if (cachedTemp != null) {
+                    tempValue = cachedTemp;
+                    Log.d("Scan", "Using cached temperature for " + macAddress + ": " + tempValue + "°C");
+                }
+            }
+        }
+        
         
         if (tempValue == 0.0f) {
             Log.d("Scan", "Warning: Temperature is 0°C for device: " + mst03Entity.getMacAddress());

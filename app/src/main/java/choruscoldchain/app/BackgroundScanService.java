@@ -27,7 +27,7 @@ public class BackgroundScanService extends Service {
     private static final String TAG = "BackgroundScanService";
     private static final String CHANNEL_ID = "scan_service_channel";
     private static final int NOTIFICATION_ID = 1;
-    
+
     private MST03SensorBleManager mBleManager;
     private Handler scanHandler = new Handler(Looper.getMainLooper());
     private HttpLogger httpLogger;
@@ -35,13 +35,12 @@ public class BackgroundScanService extends Service {
     private boolean isPaused = false;
     private DeviceDiscoveryManager deviceManager;
     private PowerManager.WakeLock wakeLock;
-    
-    // Scan cycle: 6 seconds scan + 6 seconds wait
-    private static final int SCAN_DURATION = 6 * 1000; // 6 seconds
-    private static final int INITIAL_SCAN_DURATION = 20 * 1000; // 20 seconds for initial scan
-    private static final int WAIT_DURATION = 6 * 1000; // 6 seconds wait
-    private boolean isInitialScan = true; // Track if this is the first scan
-    
+
+    private static final int SCAN_DURATION = 6 * 1000;
+    private static final int INITIAL_SCAN_DURATION = 20 * 1000;
+    private static final int WAIT_DURATION = 6 * 1000;
+    private boolean isInitialScan = true;
+
     public void pauseScanning() {
         Log.d(TAG, "Pausing background scanning");
         isPaused = true;
@@ -55,7 +54,7 @@ public class BackgroundScanService extends Service {
             }
         }
     }
-    
+
     public void resumeScanning() {
         Log.d(TAG, "Resuming background scanning");
         isPaused = false;
@@ -71,8 +70,7 @@ public class BackgroundScanService extends Service {
         initBleManager();
         httpLogger = new HttpLogger();
         deviceManager = DeviceDiscoveryManager.getInstance();
-        
-        // Acquire wake lock to keep service running when device is locked
+
         PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
         if (powerManager != null) {
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "BackgroundScanService::WakeLock");
@@ -84,12 +82,11 @@ public class BackgroundScanService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d(TAG, "Background scan service started");
-        
-        // Handle pause/resume actions
+
         if (intent != null && intent.getAction() != null) {
             String action = intent.getAction();
             Log.d(TAG, "Received action: " + action);
-            
+
             switch (action) {
                 case "PAUSE_SCAN":
                     pauseScanning();
@@ -99,14 +96,14 @@ public class BackgroundScanService extends Service {
                     return START_STICKY;
             }
         }
-        
+
         try {
-            // Create notification for foreground service with higher priority
+
             Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
                     .setContentTitle("Beacon Scanner Active")
                     .setContentText("Scanning for beacons in background")
                     .setSmallIcon(R.drawable.ic_temp)
-                    .setPriority(NotificationCompat.PRIORITY_DEFAULT) // Changed from LOW to DEFAULT
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                     .setOngoing(true)
                     .setAutoCancel(false)
                     .setCategory(NotificationCompat.CATEGORY_SERVICE)
@@ -114,195 +111,127 @@ public class BackgroundScanService extends Service {
 
             startForeground(NOTIFICATION_ID, notification);
             Log.d(TAG, "Foreground service started successfully");
-            
-            // Start the scanning cycle
+
             startScanningCycle();
-            
-            // Start periodic health check
+
             startHealthCheck();
-            
+
         } catch (Exception e) {
             Log.e(TAG, "Failed to start foreground service: " + e.getMessage());
             stopSelf();
             return START_NOT_STICKY;
         }
-        
-        return START_STICKY; // This ensures the service restarts if killed
+
+        return START_STICKY;
     }
-    
+
     private void initBleManager() {
         try {
-            // Get the singleton instance
+
             mBleManager = MST03SensorBleManager.getInstance();
             if (mBleManager == null) {
                 Log.e(TAG, "Failed to get BLE manager instance");
                 return;
             }
-            
-            // Don't set connection listeners in background service to avoid conflicts
-            // The main activity will handle connection state management
+
             Log.d(TAG, "BLE manager initialized successfully for background scanning");
         } catch (Exception e) {
             Log.e(TAG, "Error initializing BLE manager: " + e.getMessage());
         }
     }
-    
+
     private void startScanningCycle() {
         if (mBleManager == null) {
             Log.e(TAG, "BLE manager not initialized, cannot start scanning");
             return;
         }
-        
+
         Log.d(TAG, "Starting background scanning cycle");
         startScan();
     }
-    
+
     private void restartServiceIfNeeded() {
-        // If service was killed, restart it
+
         if (!isScanning && !isPaused) {
             Log.d(TAG, "Service appears to have been killed, restarting scan cycle");
             startScanningCycle();
         }
     }
-    
+
     private void startHealthCheck() {
-        // Check every 30 seconds if the service is still running properly
+
         scanHandler.postDelayed(new Runnable() {
             @Override
             public void run() {
                 Log.d(TAG, "Health check - Service running: " + (!isPaused) + ", Scanning: " + isScanning);
-                
-                // If not scanning and not paused, restart
+
                 if (!isScanning && !isPaused) {
                     Log.d(TAG, "Health check detected service not scanning, restarting");
                     startScanningCycle();
                 }
-                
-                // Schedule next health check
+
                 startHealthCheck();
             }
-        }, 30000); // 30 seconds
+        }, 30000);
     }
-    
+
     private void startScan() {
         if (isScanning || isPaused) {
             Log.d(TAG, "Scan already in progress or paused, skipping");
             return;
         }
-        
-        // Use longer duration for initial scan to improve device discovery
+
         int scanDuration = isInitialScan ? INITIAL_SCAN_DURATION : SCAN_DURATION;
-        Log.d(TAG, "Starting background BLE scan with duration: " + (scanDuration/1000) + "s (initial: " + isInitialScan + ")");
-        
+        Log.d(TAG, "Starting background BLE scan with duration: " + (scanDuration / 1000) + "s (initial: "
+                + isInitialScan + ")");
+
         try {
             isScanning = true;
             Log.d(TAG, "Starting background BLE scan...");
-            
+
             mBleManager.startScan(this, scanDuration, new OnScanDevicesResultListener<MST03Entity>() {
                 @Override
                 public void onScanResult(List<MST03Entity> list) {
                     Log.d(TAG, "Background scan result: " + list.size() + " devices found");
-                    
+
                     if (list.size() > 0) {
-                        // Log detailed data for each device
+
                         for (MST03Entity mst03Entity : list) {
-                            
-                            
-                            
-                            
-                            
-                            // Specifically check for battery, temperature, and firmware
-                            
-                            
-                            // Check DeviceStaticInfoFrame for battery and firmware
-                            com.minew.ble.mst03.frames.DeviceStaticInfoFrame deviceInfo = 
-                                (com.minew.ble.mst03.frames.DeviceStaticInfoFrame) mst03Entity.getMinewFrame(com.minew.ble.v3.enums.FrameType.DEVICE_INFORMATION_FRAME);
-                            if (deviceInfo != null) {
-                                
-                                
-                                
-                                
-                                
-                            } else {
-                                
-                            }
-                            
-                            // Check CombinationFrame for temperature
-                            com.minew.ble.mst03.frames.CombinationFrame comboFrame = 
-                                (com.minew.ble.mst03.frames.CombinationFrame) mst03Entity.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
-                            if (comboFrame != null) {
-                                Log.d(TAG, "[CombinationFrame] Available for " + mst03Entity.getMacAddress() + 
-                                      " - Temp: " + comboFrame.getTemperature() + "°C");
-                            } else {
-                                Log.d(TAG, "[CombinationFrame] Missing for " + mst03Entity.getMacAddress() + 
-                                      " - Temperature data not yet available");
-                            }
-                            
-                            
-                            
-                            // Log all available frames in scan result
-                            
-                            try {
-                                com.minew.ble.v3.enums.FrameType[] allFrameTypes = com.minew.ble.v3.enums.FrameType.values();
-                                for (com.minew.ble.v3.enums.FrameType frameType : allFrameTypes) {
-                                    try {
-                                        Object frame = mst03Entity.getMinewFrame(frameType);
-                                        if (frame != null) {
-                                            Log.d(TAG, "[Beacon Data] MAC: " + mst03Entity.getMacAddress() + ", FrameType: " + frameType + ", Data: " + frame.toString());
-                                        } else {
-                                            Log.d(TAG, "[Beacon Data] MAC: " + mst03Entity.getMacAddress() + ", FrameType: " + frameType + ", Data: null");
-                                        }
-                                    } catch (Exception e) {
-                                        Log.e(TAG, "[Beacon Data] Error logging frameType: " + frameType, e);
-                                    }
-                                }
-                            } catch (Exception e) {
-                                Log.e(TAG, "[Beacon Data] Error logging all frame types", e);
-                            }
-                            
+
+                            com.minew.ble.mst03.frames.DeviceStaticInfoFrame deviceInfo = (com.minew.ble.mst03.frames.DeviceStaticInfoFrame) mst03Entity
+                                    .getMinewFrame(com.minew.ble.v3.enums.FrameType.DEVICE_INFORMATION_FRAME);
+
+                            com.minew.ble.mst03.frames.CombinationFrame comboFrame = (com.minew.ble.mst03.frames.CombinationFrame) mst03Entity
+                                    .getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
                         }
-                        
-                        // Update the shared device manager
+
                         deviceManager.updateDevices(list);
-                        
-                        // Log scan data for each device
+
                         for (MST03Entity device : list) {
-                            Log.d(TAG, "Background device: " + device.getMacAddress() + " - " + device.getName());
-                            
-                            // Log to HTTP server only if we have valid temperature data
                             float temperature = 0.0f;
                             int battery = 0;
                             String firmwareVersion = "Unknown";
                             boolean hasValidTemperature = false;
-                            
+
                             if (device.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME) != null) {
-                                com.minew.ble.mst03.frames.CombinationFrame comboFrame = 
-                                    (com.minew.ble.mst03.frames.CombinationFrame) device.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
+                                com.minew.ble.mst03.frames.CombinationFrame comboFrame = (com.minew.ble.mst03.frames.CombinationFrame) device
+                                        .getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
                                 temperature = comboFrame.getTemperature();
-                                
-                                // Validate temperature - only log if temperature is valid (not 0, not NaN)
-                                if (temperature != 0.0f && !Float.isNaN(temperature)) {
-                                    hasValidTemperature = true;
-                                    Log.d(TAG, "Valid temperature found: " + temperature + "°C for device: " + device.getMacAddress());
-                                } else {
-                                    Log.d(TAG, "Invalid temperature (0 or NaN): " + temperature + "°C for device: " + device.getMacAddress() + " - skipping HTTP log");
-                                }
+
+                                if (!Float.isNaN(temperature)) hasValidTemperature = true;
                             }
-                            
-                            if (device.getMinewFrame(com.minew.ble.v3.enums.FrameType.DEVICE_INFORMATION_FRAME) != null) {
-                                com.minew.ble.mst03.frames.DeviceStaticInfoFrame staticFrame = 
-                                    (com.minew.ble.mst03.frames.DeviceStaticInfoFrame) device.getMinewFrame(com.minew.ble.v3.enums.FrameType.DEVICE_INFORMATION_FRAME);
+
+                            if (device
+                                    .getMinewFrame(com.minew.ble.v3.enums.FrameType.DEVICE_INFORMATION_FRAME) != null) {
+                                com.minew.ble.mst03.frames.DeviceStaticInfoFrame staticFrame = (com.minew.ble.mst03.frames.DeviceStaticInfoFrame) device
+                                        .getMinewFrame(com.minew.ble.v3.enums.FrameType.DEVICE_INFORMATION_FRAME);
                                 battery = staticFrame.getBattery();
                                 firmwareVersion = staticFrame.getFirmwareVersion();
                             }
-                            
-                            // Only send HTTP log if we have valid temperature data
-                            if (hasValidTemperature) {
-                                Log.d(TAG, "Sending HTTP log for device: " + device.getMacAddress() + " with valid temperature: " + temperature + "°C");
-                                httpLogger.logScanData(device.getMacAddress(), temperature, battery, firmwareVersion, device.getRssi());
-                            } else {
-                                Log.d(TAG, "Skipping HTTP log for device: " + device.getMacAddress() + " - no valid temperature data");
-                            }
+
+                            if (hasValidTemperature)
+                                httpLogger.logScanData(device.getMacAddress(), temperature, battery, firmwareVersion,
+                                        device.getRssi());
                         }
                     }
                 }
@@ -311,19 +240,17 @@ public class BackgroundScanService extends Service {
                 public void onStopScan(List<MST03Entity> list) {
                     Log.d(TAG, "Background scan stopped");
                     isScanning = false;
-                    
-                    // Mark initial scan as complete after first scan
+
                     if (isInitialScan) {
                         isInitialScan = false;
                         Log.d(TAG, "Initial scan completed, switching to normal 6s scan cycle");
                     }
-                    
-                    // Schedule next scan after wait period only if not paused
+
                     if (!isPaused) {
                         scanHandler.postDelayed(new Runnable() {
                             @Override
                             public void run() {
-                                // Check if we should continue scanning
+
                                 if (!isScanning && !isPaused) {
                                     startScan();
                                 }
@@ -332,12 +259,11 @@ public class BackgroundScanService extends Service {
                     }
                 }
             });
-            
+
         } catch (Exception e) {
             Log.e(TAG, "Error starting background scan: " + e.getMessage());
             isScanning = false;
-            
-            // Retry after a delay only if not paused
+
             if (!isPaused) {
                 scanHandler.postDelayed(new Runnable() {
                     @Override
@@ -350,8 +276,6 @@ public class BackgroundScanService extends Service {
             }
         }
     }
-    
-
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -363,14 +287,13 @@ public class BackgroundScanService extends Service {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
                     "Beacon Scanner",
-                    NotificationManager.IMPORTANCE_DEFAULT // Changed from LOW to DEFAULT
-            );
+                    NotificationManager.IMPORTANCE_DEFAULT);
             channel.setDescription("Background beacon scanning service");
             channel.setShowBadge(false);
-            channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC); // Show on lock screen
+            channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             channel.enableLights(false);
             channel.enableVibration(false);
-            
+
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
                 manager.createNotificationChannel(channel);
@@ -382,14 +305,12 @@ public class BackgroundScanService extends Service {
     public void onDestroy() {
         super.onDestroy();
         Log.d(TAG, "Background scan service destroyed");
-        
-        // Release wake lock
+
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release();
             Log.d(TAG, "Wake lock released");
         }
-        
-        // Stop scanning
+
         if (mBleManager != null && isScanning) {
             try {
                 mBleManager.stopScan(this);
@@ -398,22 +319,19 @@ public class BackgroundScanService extends Service {
                 Log.e(TAG, "Error stopping scan: " + e.getMessage());
             }
         }
-        
-        // Remove any pending scan operations
+
         scanHandler.removeCallbacksAndMessages(null);
-        
-        // Shutdown HTTP logger
+
         if (httpLogger != null) {
             httpLogger.shutdown();
         }
     }
-    
+
     @Override
     public void onTaskRemoved(Intent rootIntent) {
         super.onTaskRemoved(rootIntent);
         Log.d(TAG, "App removed from recents - stopping background service");
-        
-        // Stop the service when app is removed from recents
+
         stopSelf();
     }
-} 
+}

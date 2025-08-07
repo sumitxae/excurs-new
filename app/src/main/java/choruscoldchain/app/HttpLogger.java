@@ -20,7 +20,7 @@ import com.minew.ble.mst03.bean.HtData;
 public class HttpLogger {
     private static final String TAG = "HttpLogger";
     // Use actual IP address for real device
-    private static final String LOG_URL = "http://51.21.86.14:8000/v1/logger/log";
+    private static final String LOG_URL = "http://34.61.53.179:8000/v1/logger/log";
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
     private final OkHttpClient client;

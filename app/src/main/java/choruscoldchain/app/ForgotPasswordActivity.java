@@ -7,6 +7,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.button.MaterialButton;
@@ -39,6 +40,7 @@ public class ForgotPasswordActivity extends AppCompatActivity {
         initViews();
         setupListeners();
         loadChorusLogo();
+        setupAppId();
     }
     
     private void initViews() {
@@ -78,6 +80,14 @@ public class ForgotPasswordActivity extends AppCompatActivity {
     private void setupListeners() {
         btnSubmit.setOnClickListener(v -> handleSubmit());
         btnBackToLogin.setOnClickListener(v -> finish());
+    }
+    
+    private void setupAppId() {
+        InstallationIdManager installationIdManager = InstallationIdManager.getInstance(this);
+        TextView tvAppId = findViewById(R.id.tv_scan_app_id);
+        if (tvAppId != null) {
+            tvAppId.setText("App ID: " + installationIdManager.getInstallationId());
+        }
     }
     
     private void handleSubmit() {

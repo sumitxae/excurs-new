@@ -2,6 +2,7 @@ package choruscoldchain.app;
 
 import retrofit2.Call;
 import retrofit2.http.Body;
+import retrofit2.http.Header;
 import retrofit2.http.POST;
 
 public interface AuthApiService {
@@ -20,4 +21,7 @@ public interface AuthApiService {
     
     @POST("auth/initPassword")
     Call<AuthModels.InitPasswordResponse> initPassword(@Body AuthModels.InitPasswordRequest request);
+    
+    @POST("auth/resetPassword")
+    Call<AuthModels.ResetPasswordResponse> resetPassword(@Header("Authorization") String authorization, @Body AuthModels.ResetPasswordRequest request);
 } 

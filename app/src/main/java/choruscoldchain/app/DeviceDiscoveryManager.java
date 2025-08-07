@@ -10,57 +10,57 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class DeviceDiscoveryManager {
     private static final String TAG = "DeviceDiscoveryManager";
     private static DeviceDiscoveryManager instance;
-    
+
     private final CopyOnWriteArrayList<MST03Entity> discoveredDevices = new CopyOnWriteArrayList<>();
     private final List<OnDevicesUpdatedListener> listeners = new ArrayList<>();
-    
+
     public interface OnDevicesUpdatedListener {
         void onDevicesUpdated(List<MST03Entity> devices);
     }
-    
-    private DeviceDiscoveryManager() {}
-    
+
+    private DeviceDiscoveryManager() {
+    }
+
     public static synchronized DeviceDiscoveryManager getInstance() {
         if (instance == null) {
             instance = new DeviceDiscoveryManager();
         }
         return instance;
     }
-    
+
     public void addListener(OnDevicesUpdatedListener listener) {
         if (!listeners.contains(listener)) {
             listeners.add(listener);
-            // Immediately notify the new listener with current devices
+
             if (!discoveredDevices.isEmpty()) {
                 listener.onDevicesUpdated(new ArrayList<>(discoveredDevices));
             }
         }
     }
-    
+
     public void removeListener(OnDevicesUpdatedListener listener) {
         listeners.remove(listener);
     }
-    
+
     public void updateDevices(List<MST03Entity> newDevices) {
         Log.d(TAG, "Updating devices: " + newDevices.size() + " new devices");
-        
-        // Update the discovered devices list
+
         for (MST03Entity newDevice : newDevices) {
-            // Log CombinationFrame availability for debugging
-            com.minew.ble.mst03.frames.CombinationFrame comboFrame = 
-                (com.minew.ble.mst03.frames.CombinationFrame) newDevice.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
+
+            com.minew.ble.mst03.frames.CombinationFrame comboFrame = (com.minew.ble.mst03.frames.CombinationFrame) newDevice
+                    .getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
             if (comboFrame != null) {
-                Log.d(TAG, "[FrameLog] CombinationFrame available for " + newDevice.getMacAddress() + 
-                      " - Temp: " + comboFrame.getTemperature() + "°C");
+                Log.d(TAG, "[FrameLog] CombinationFrame available for " + newDevice.getMacAddress() +
+                        " - Temp: " + comboFrame.getTemperature() + "°C");
             } else {
                 Log.d(TAG, "[FrameLog] CombinationFrame not yet available for " + newDevice.getMacAddress());
             }
-            
+
             boolean found = false;
             for (int i = 0; i < discoveredDevices.size(); i++) {
                 MST03Entity existingDevice = discoveredDevices.get(i);
                 if (existingDevice.getMacAddress().equals(newDevice.getMacAddress())) {
-                    // Update existing device with new data
+
                     discoveredDevices.set(i, newDevice);
                     found = true;
                     break;
@@ -70,8 +70,7 @@ public class DeviceDiscoveryManager {
                 discoveredDevices.add(newDevice);
             }
         }
-        
-        // Sort by RSSI (strongest first)
+
         List<MST03Entity> sortedDevices = new ArrayList<>(discoveredDevices);
         sortedDevices.sort(new Comparator<MST03Entity>() {
             @Override
@@ -79,26 +78,24 @@ public class DeviceDiscoveryManager {
                 return o2.getRssi() - o1.getRssi();
             }
         });
-        
-        // Update the main list with sorted devices
+
         discoveredDevices.clear();
         discoveredDevices.addAll(sortedDevices);
-        
+
         Log.d(TAG, "Total devices after update: " + discoveredDevices.size());
-        
-        // Notify all listeners
+
         notifyListeners();
     }
-    
+
     public List<MST03Entity> getDiscoveredDevices() {
         return new ArrayList<>(discoveredDevices);
     }
-    
+
     public void clearDevices() {
         discoveredDevices.clear();
         notifyListeners();
     }
-    
+
     private void notifyListeners() {
         List<MST03Entity> devicesCopy = new ArrayList<>(discoveredDevices);
         for (OnDevicesUpdatedListener listener : listeners) {
@@ -109,4 +106,4 @@ public class DeviceDiscoveryManager {
             }
         }
     }
-} 
+}

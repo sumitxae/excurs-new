@@ -86,6 +86,19 @@ public class AuthModels {
         }
     }
     
+    public static class ResetPasswordRequest {
+        @SerializedName("newPassword")
+        private String newPassword;
+        
+        public ResetPasswordRequest(String newPassword) {
+            this.newPassword = newPassword;
+        }
+        
+        public String getNewPassword() {
+            return newPassword;
+        }
+    }
+    
     public static class InitPasswordResponse {
         @SerializedName("user")
         private User user;
@@ -107,6 +120,35 @@ public class AuthModels {
         
         public String getMessage() {
             return "Password initialized successfully";
+        }
+    }
+    
+    public static class ResetPasswordResponse {
+        @SerializedName("message")
+        private String message;
+        
+        @SerializedName("resetResponse")
+        private ResetResponse resetResponse;
+        
+        public boolean isSuccess() {
+            return message != null && message.contains("successfully");
+        }
+        
+        public String getMessage() {
+            return message;
+        }
+        
+        public ResetResponse getResetResponse() {
+            return resetResponse;
+        }
+        
+        public static class ResetResponse {
+            @SerializedName("message")
+            private String message;
+            
+            public String getMessage() {
+                return message;
+            }
         }
     }
     

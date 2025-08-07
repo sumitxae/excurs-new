@@ -56,8 +56,7 @@ public class SignInActivity extends AppCompatActivity {
             getWindow().getDecorView().getSystemUiVisibility() | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
         );
         
-        // Ensure proper keyboard handling
-        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        // Keyboard handling is set in AndroidManifest.xml to adjustPan
         
         // Check if user is already logged in
         authManager = AuthManager.getInstance(this);
@@ -84,6 +83,9 @@ public class SignInActivity extends AppCompatActivity {
         ivPasswordToggle = findViewById(R.id.ivPasswordToggle);
         ivChorusLogo = findViewById(R.id.ivChorusLogo);
         cbRememberMe = findViewById(R.id.cbRememberMe);
+        
+        // Set up app ID in footer
+        setupAppId();
     }
     
     private void loadChorusLogo() {
@@ -171,7 +173,7 @@ public class SignInActivity extends AppCompatActivity {
     private void togglePasswordVisibility() {
         if (isPasswordVisible) {
             etPassword.setTransformationMethod(PasswordTransformationMethod.getInstance());
-            ivPasswordToggle.setImageResource(R.drawable.ic_visibility_off);
+                            ivPasswordToggle.setImageResource(R.drawable.ic_visibility_off);
             isPasswordVisible = false;
         } else {
             etPassword.setTransformationMethod(null);
@@ -351,6 +353,14 @@ public class SignInActivity extends AppCompatActivity {
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();
+    }
+    
+    private void setupAppId() {
+        InstallationIdManager installationIdManager = InstallationIdManager.getInstance(this);
+        TextView tvAppId = findViewById(R.id.tv_scan_app_id);
+        if (tvAppId != null) {
+            tvAppId.setText("App ID: " + installationIdManager.getInstallationId());
+        }
     }
     
     @Override

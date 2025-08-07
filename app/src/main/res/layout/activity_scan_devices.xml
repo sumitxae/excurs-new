@@ -145,7 +145,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/header_layout"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toTopOf="@+id/device_details_card"
+        app:layout_constraintBottom_toTopOf="@+id/scan_app_id_footer"
         >
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerView"
@@ -355,9 +355,19 @@
         android:layout_width="50dp"
         android:layout_height="50dp"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/scan_app_id_footer"
         android:layout_marginEnd="16dp"
         android:layout_marginBottom="16dp"
         android:background="@mipmap/new_refresh_home" />
+
+    <!-- Elevated App ID Footer for Scan Screen -->
+    <include
+        android:id="@+id/scan_app_id_footer"
+        layout="@layout/layout_scan_app_id_footer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

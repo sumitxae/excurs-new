@@ -58,6 +58,7 @@ public class VerifyOtpActivity extends AppCompatActivity {
         initViews();
         setupListeners();
         loadChorusLogo();
+        setupAppId();
         startTimer();
         
         // Auto focus first input
@@ -100,6 +101,14 @@ public class VerifyOtpActivity extends AppCompatActivity {
         // Fallback to drawable if all asset loading fails
         Log.w(TAG, "Falling back to drawable chorus logo");
         ivChorusLogo.setImageResource(R.drawable.ic_chorus_logo);
+    }
+    
+    private void setupAppId() {
+        InstallationIdManager installationIdManager = InstallationIdManager.getInstance(this);
+        TextView tvAppId = findViewById(R.id.tv_scan_app_id);
+        if (tvAppId != null) {
+            tvAppId.setText("App ID: " + installationIdManager.getInstallationId());
+        }
     }
     
     private void setupListeners() {
@@ -278,6 +287,7 @@ public class VerifyOtpActivity extends AppCompatActivity {
     private void navigateToResetPassword() {
         Intent intent = new Intent(this, ResetPasswordActivity.class);
         intent.putExtra("email", email);
+        intent.putExtra("accessToken", authManager.getToken());
         startActivity(intent);
         finish();
     }
