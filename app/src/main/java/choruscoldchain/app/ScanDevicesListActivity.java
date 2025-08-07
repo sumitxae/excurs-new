@@ -63,6 +63,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.Set;
 import java.util.HashSet;
+import android.os.Handler;
 
 public class ScanDevicesListActivity extends BaseActivity {
 
@@ -625,84 +626,40 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
 
     private void connectToDeviceAndNavigate(MST03Entity device) {
-
         if (isConnecting) {
-
             Toast.makeText(this, "Already connecting to a device", Toast.LENGTH_SHORT).show();
             return;
         }
-
-        if (!isBleManagerReady) {
-            Toast.makeText(this, "Bluetooth is initializing, please wait a moment...", Toast.LENGTH_LONG).show();
-            Log.d("ScanDebug", "Connection attempt while BLE manager not ready, user should wait");
-            return;
-        }
-
-        clearProcessedData();
-        resetConnectionState();
-
+        
         isConnecting = true;
         mst03Entity = device;
-
-        currentDeviceMac = device.getMacAddress();
-
-        Log.d("ScanDebug", "Starting connection to device: " + device.getMacAddress());
-        WaitDialog.show("");
-
-        connectionTimeoutHandler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                if (isConnecting && !isActivityLaunched) {
-                    Log.d("ScanDebug", "Connection timeout - proceeding to device details with available data");
-                    isConnecting = false;
-                    isActivityLaunched = true;
-                    WaitDialog.dismiss();
-
-                    isDataProcessingComplete = true;
-                    updateProcessingStatus("Timeout");
-
-                    int batteryLevel = -1;
-                    String firmwareVersion = "Unknown";
-                    float currentTemperature = Float.NaN;
-
-                    if (device != null) {
-
-                        DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) device
-                                .getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
-                        if (deviceInfo != null) {
-                            batteryLevel = deviceInfo.getBattery();
-                            firmwareVersion = deviceInfo.getFirmwareVersion();
-
-                        }
-
-                        CombinationFrame comboFrame = (CombinationFrame) device
-                                .getMinewFrame(FrameType.COMBINATION_FRAME);
-                        if (comboFrame != null) {
-                            currentTemperature = comboFrame.getTemperature();
-
-                        }
-                    }
-
-                    Intent intent = DeviceDetailsActivity.newIntent(ScanDevicesListActivity.this, device, batteryLevel,
-                            firmwareVersion, currentTemperature);
-                    startActivity(intent);
-                }
-            }
-        }, 8000);
-
+        
+        // Disable all connect buttons during connection
+        mDevicesListAdapter.setConnectButtonsEnabled(false);
+        
+        // Show connection dialog
+        WaitDialog.show();
+        
+        // Start connection with improved timeout handling
+        startConnectionWithTimeout(device);
+        
+        // Ensure BLE manager is ready and listener is set
         ensureBleManagerReady();
-
+        
+        // Stop background scan service before connecting
         if (isBackgroundServiceRunning()) {
             stopService(new Intent(this, BackgroundScanService.class));
         }
-
-        mBleManager.stopScan(this);
-
+        // Stop any direct scans
+        if (mBleManager != null) {
+            mBleManager.stopScan(this);
+        }
+        
+        // Connect to the device
         try {
             if (mBleManager != null) {
-
                 mBleManager.connect(this, device);
-
+                Log.d("ScanDebug", "Connection initiated for device: " + device.getMacAddress());
             } else {
                 Log.e("ScanDebug", "BLE manager is null, cannot connect");
                 throw new Exception("BLE manager not initialized");
@@ -710,35 +667,8 @@ public class ScanDevicesListActivity extends BaseActivity {
         } catch (Exception e) {
             Log.e("ScanDebug", "Error connecting to device: " + e.getMessage());
             e.printStackTrace();
-            isConnecting = false;
-            WaitDialog.dismiss();
-
-            int batteryLevel = -1;
-            String firmwareVersion = "Unknown";
-            float currentTemperature = Float.NaN;
-
-            if (device != null) {
-
-                DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) device
-                        .getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
-                if (deviceInfo != null) {
-                    batteryLevel = deviceInfo.getBattery();
-                    firmwareVersion = deviceInfo.getFirmwareVersion();
-
-                }
-
-                CombinationFrame comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.COMBINATION_FRAME);
-                if (comboFrame != null) {
-                    currentTemperature = comboFrame.getTemperature();
-
-                }
-            }
-
-            Intent intent = DeviceDetailsActivity.newIntent(ScanDevicesListActivity.this, device, batteryLevel,
-                    firmwareVersion, currentTemperature);
-            startActivity(intent);
+            handleConnectionError(device, e.getMessage());
         }
-
     }
 
     private void initAnimator() {
@@ -870,134 +800,437 @@ public class ScanDevicesListActivity extends BaseActivity {
     private OnConnStateListener mConnStateListener = new OnConnStateListener() {
         @Override
         public void onUpdateConnState(String s, BleConnectionState mSensorConnectionState) {
-            Log.d("ScanDebug", "Connection state update: " + s + " -> " + mSensorConnectionState);
-
+            
             if (mst03Entity != null && s.equals(mst03Entity.getMacAddress())) {
-                Log.d("ScanDebug", "State update for current device: " + mst03Entity.getMacAddress());
+                // Only process events for our target device
             }
-
+            
             switch (mSensorConnectionState) {
                 case Connecting:
-                    Log.d("ScanDebug", "Connecting to device: " + s);
+                    Log.d("TAG","Connecting");
+                    updateConnectionStatus("Connecting...");
                     break;
                 case Connected:
-                    Log.d("ScanDebug", "Connected to device: " + s);
+                    Log.d("TAG","Connected");
+                    updateConnectionStatus("Connected - Authenticating...");
+                    
+                    // Set the secret key immediately when connected (required for authentication)
                     if (mst03Entity != null && s.equals(mst03Entity.getMacAddress())) {
-                        Log.d("ScanDebug", "Setting authentication key for device: " + s);
                         setKey(s);
                     }
                     break;
                 case AuthenticateSuccess:
-                    Log.d("ScanDebug", "Authentication successful for device: " + s);
+                    Log.d("TAG","AuthenticateSuccess");
+                    updateConnectionStatus("Authenticated Successfully");
                     break;
                 case AuthenticateFail:
+                    Log.d("TAG","AuthenticateFail");
+                    updateConnectionStatus("Authentication Failed");
                     Log.e("ScanDebug", "Authentication failed for device: " + s);
-
+                    
+                    // Handle authentication failure
                     if (mst03Entity != null && s.equals(mst03Entity.getMacAddress())) {
-                        connectionTimeoutHandler.removeCallbacksAndMessages(null);
-                        WaitDialog.dismiss();
-
-                        isDataProcessingComplete = true;
-                        updateProcessingStatus("Auth Failed");
-
-                        runOnUiThread(() -> {
-                            Toast.makeText(ScanDevicesListActivity.this, "Authentication failed. Please try again.",
-                                    Toast.LENGTH_LONG).show();
-                            isConnecting = false;
-
-                            if (mBleManager != null) {
-                                Log.d("ScanDebug", "Disconnecting device after auth failure: " + s);
-                                mBleManager.disConnect(s);
-                            }
-                        });
+                        handleConnectionFailure("Authentication failed. Please try again.");
                     }
                     break;
-
                 case ConnectComplete:
-                    Log.d("ScanDebug", "Connection complete for device: " + s);
-
+                    Log.d("TAG","ConnectComplete");
+                    
                     connectionTimeoutHandler.removeCallbacksAndMessages(null);
-
-                    WaitDialog.dismiss();
-
-                    if (mst03Entity == null || !s.equals(mst03Entity.getMacAddress())) {
-                        Log.w("ScanDebug", "Connection complete for different device or device is null");
-                        return;
-                    }
-
-                    // Check if activity is already launched to prevent double launch
-                    if (isActivityLaunched) {
-                        Log.d("ScanDebug", "Activity already launched, skipping duplicate launch");
-                        return;
-                    }
-
+                    
+                    // Extract device information for navigation
                     int batteryLevel = -1;
                     String firmwareVersion = "Unknown";
                     float currentTemperature = Float.NaN;
-
+                    
                     if (mst03Entity != null) {
-                        DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) mst03Entity
-                                .getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
+                        // Get device static info
+                        DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) mst03Entity.getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
                         if (deviceInfo != null) {
                             batteryLevel = deviceInfo.getBattery();
                             firmwareVersion = deviceInfo.getFirmwareVersion();
                             currentDeviceStaticInfo = deviceInfo;
-                            Log.d("BeaconData", "[ConnectComplete] MAC: " + mst03Entity.getMacAddress()
-                                    + ", DeviceInfo: " + deviceInfo.toString());
-                        } else {
-                            Log.d("BeaconData",
-                                    "[ConnectComplete] MAC: " + mst03Entity.getMacAddress() + ", DeviceInfo: null");
                         }
-
-                        CombinationFrame comboFrame = (CombinationFrame) mst03Entity
-                                .getMinewFrame(FrameType.COMBINATION_FRAME);
+                        // Get current temperature from combination frame
+                        CombinationFrame comboFrame = (CombinationFrame) mst03Entity.getMinewFrame(FrameType.COMBINATION_FRAME);
                         if (comboFrame != null) {
                             currentTemperature = comboFrame.getTemperature();
-                            Log.d("BeaconData", "[ConnectComplete] MAC: " + mst03Entity.getMacAddress()
-                                    + ", CombinationFrame: " + comboFrame.toString());
-                        } else {
-                            Log.d("BeaconData", "[ConnectComplete] MAC: " + mst03Entity.getMacAddress()
-                                    + ", CombinationFrame: null");
                         }
                     }
-
-                    startDataFetchingAndLaunchActivity(batteryLevel, firmwareVersion, currentTemperature);
+                    
+                    // Store device info for navigation after data fetch
+                    final int finalBatteryLevel = batteryLevel;
+                    final String finalFirmwareVersion = firmwareVersion;
+                    final float finalCurrentTemperature = currentTemperature;
+                    
+                    // Start data fetching and wait for completion before navigation
+                    updateConnectionStatus("Connected - Fetching Data...");
+                    
+                    // Fetch data with callback for navigation
+                    fetchHistoricalDataWithNavigation(finalBatteryLevel, finalFirmwareVersion, finalCurrentTemperature);
                     break;
                 case Disconnect:
-                    Log.d("ScanDebug", "Device disconnected: " + s);
+                    Log.d("ScanDebug", "Device disconnected, restarting scan service");
                     connectionTimeoutHandler.removeCallbacksAndMessages(null);
+                    updateConnectionStatus("Disconnected");
+                    isConnecting = false;
+                    mDevicesListAdapter.setConnectButtonsEnabled(true);
 
-                    if (mst03Entity != null && s.equals(mst03Entity.getMacAddress()) && isConnecting) {
-                        WaitDialog.dismiss();
-
-                        isDataProcessingComplete = true;
-                        updateProcessingStatus("Disconnected");
-
-                        runOnUiThread(() -> {
-                            Toast.makeText(ScanDevicesListActivity.this, "Device disconnected unexpectedly.",
-                                    Toast.LENGTH_LONG).show();
-                            isConnecting = false;
-                        });
-                    } else {
-
-                        Log.d("ScanDebug", "Device disconnected, restarting scan service");
-                        isConnecting = false;
-
-                        if (mst03Entity != null && s.equals(mst03Entity.getMacAddress())) {
-                            hideDeviceDetailsCard();
-                        }
-
-                        startBackgroundScanService();
-                        Log.d("ScanDebug", "Called startBackgroundScanService() after disconnect");
+                    if (mst03Entity != null && s.equals(mst03Entity.getMacAddress())) {
+                        hideDeviceDetailsCard();
                     }
+
+                    // Restart background scan service after disconnect
+                    startBackgroundScanService();
+                    Log.d("ScanDebug", "Called startBackgroundScanService() after disconnect");
                     break;
 
                 default:
-
                     break;
             }
         }
     };
+
+    // Helper method to handle connection failures
+    private void handleConnectionFailure(String errorMessage) {
+        connectionTimeoutHandler.removeCallbacksAndMessages(null);
+        WaitDialog.dismiss();
+        
+        runOnUiThread(() -> {
+            Toast.makeText(ScanDevicesListActivity.this, errorMessage, Toast.LENGTH_LONG).show();
+            isConnecting = false;
+            mDevicesListAdapter.setConnectButtonsEnabled(true);
+            
+            // Disconnect from device
+            if (mBleManager != null && mst03Entity != null) {
+                mBleManager.disConnect(mst03Entity.getMacAddress());
+            }
+        });
+    }
+
+    /**
+     * Fetch historical data and navigate to DeviceDetailsActivity only after completion
+     */
+    private void fetchHistoricalDataWithNavigation(int batteryLevel, String firmwareVersion, float currentTemperature) {
+        Log.d("BeaconRawData", "fetchHistoricalDataWithNavigation called");
+        
+        // Set processing as not complete initially
+        isDataProcessingComplete = false;
+        
+        // Add a timeout for data fetching (15 seconds)
+        Handler dataTimeoutHandler = new Handler();
+        Runnable timeoutRunnable = new Runnable() {
+            @Override
+            public void run() {
+                Log.w("ScanDebug", "Data fetch timeout - proceeding with navigation");
+                // Navigate even if data fetch timed out
+                navigateToDeviceDetails(batteryLevel, firmwareVersion, currentTemperature);
+            }
+        };
+        dataTimeoutHandler.postDelayed(timeoutRunnable, 15000); // 15 second timeout
+        
+        long systemTime = System.currentTimeMillis() / 1000;
+        // Get data from last 24 hours 
+        long startTime = systemTime - (24 * 60 * 60); // Last 24 hours in seconds
+        long endTime = systemTime;
+        
+        try {
+            // Try with rules=1 for time-based query as per SDK documentation
+            mBleManager.queryHistoryData(mst03Entity.getMacAddress(), 1, startTime, endTime, systemTime, 
+                new OnQueryResultListener<HistoryHtData>() {
+                    @Override
+                    public void OnQueryResult(boolean success, HistoryHtData historyHtData) {
+                        Log.d("BeaconRawData", "OnQueryResult called, success=" + success + ", historyHtData=" + historyHtData);
+                        
+                        // Cancel timeout since we got a response
+                        dataTimeoutHandler.removeCallbacks(timeoutRunnable);
+                        
+                        if (success && historyHtData != null) {
+                            List<HtData> allData = historyHtData.getHistoryDataList();
+                            
+                            if (allData.isEmpty()) {
+                                // Try fallback with rules=0 (all data)
+                                tryFallbackQueryWithNavigation(systemTime, batteryLevel, firmwareVersion, currentTemperature, dataTimeoutHandler);
+                            } else {
+                                // Process data and navigate
+                                processHistoricalDataAndNavigate(allData, batteryLevel, firmwareVersion, currentTemperature);
+                            }
+                        } else {
+                            // Try fallback with rules=0 (all data)
+                            tryFallbackQueryWithNavigation(systemTime, batteryLevel, firmwareVersion, currentTemperature, dataTimeoutHandler);
+                        }
+                    }
+                });
+        } catch (Exception e) {
+            Log.e("ScanDebug", "Exception during historical data query: " + e.getMessage());
+            e.printStackTrace();
+            
+            // Cancel timeout
+            dataTimeoutHandler.removeCallbacks(timeoutRunnable);
+            
+            // Try fallback with rules=0 (all data)
+            tryFallbackQueryWithNavigation(systemTime, batteryLevel, firmwareVersion, currentTemperature, dataTimeoutHandler);
+        }
+    }
+
+    /**
+     * Try fallback query with rules=0 and navigate after completion
+     */
+    private void tryFallbackQueryWithNavigation(long systemTime, int batteryLevel, String firmwareVersion, 
+                                              float currentTemperature, Handler dataTimeoutHandler) {
+        Log.d("BeaconRawData", "tryFallbackQueryWithNavigation called");
+        
+        // Reset timeout for fallback query
+        Runnable fallbackTimeoutRunnable = new Runnable() {
+            @Override
+            public void run() {
+                Log.w("ScanDebug", "Fallback query timeout - proceeding with navigation");
+                handleNoDataAndNavigate(batteryLevel, firmwareVersion, currentTemperature);
+            }
+        };
+        dataTimeoutHandler.postDelayed(fallbackTimeoutRunnable, 10000); // 10 second timeout for fallback
+        
+        try {
+            mBleManager.queryHistoryData(mst03Entity.getMacAddress(), 0, 0, 0, systemTime, 
+                new OnQueryResultListener<HistoryHtData>() {
+                    @Override
+                    public void OnQueryResult(boolean fallbackSuccess, HistoryHtData fallbackHistoryHtData) {
+                        Log.d("BeaconRawData", "Fallback OnQueryResult called, success=" + fallbackSuccess + ", historyHtData=" + fallbackHistoryHtData);
+                        
+                        // Cancel fallback timeout
+                        dataTimeoutHandler.removeCallbacks(fallbackTimeoutRunnable);
+                        
+                        if (fallbackSuccess && fallbackHistoryHtData != null) {
+                            List<HtData> fallbackData = fallbackHistoryHtData.getHistoryDataList();
+                            
+                            if (fallbackData.isEmpty()) {
+                                handleNoDataAndNavigate(batteryLevel, firmwareVersion, currentTemperature);
+                            } else {
+                                processHistoricalDataAndNavigate(fallbackData, batteryLevel, firmwareVersion, currentTemperature);
+                            }
+                        } else {
+                            handleNoDataAndNavigate(batteryLevel, firmwareVersion, currentTemperature);
+                        }
+                    }
+                });
+        } catch (Exception e) {
+            Log.e("ScanDebug", "Exception during fallback query: " + e.getMessage());
+            e.printStackTrace();
+            dataTimeoutHandler.removeCallbacks(fallbackTimeoutRunnable);
+            handleNoDataAndNavigate(batteryLevel, firmwareVersion, currentTemperature);
+        }
+    }
+
+    /**
+     * Process historical data and navigate to DeviceDetailsActivity
+     */
+    private void processHistoricalDataAndNavigate(List<HtData> htDataList, int batteryLevel, 
+                                                String firmwareVersion, float currentTemperature) {
+        Log.d("BeaconRawData", "processHistoricalDataAndNavigate called with " + htDataList.size() + " records");
+        
+        // Log raw data for debugging
+        for (int i = 0; i < Math.min(htDataList.size(), 5); i++) {
+            HtData htData = htDataList.get(i);
+            Log.d("BeaconRawData", "Sample data " + i + ": " + htData.toString());
+        }
+
+        // Find the last excursion start (last transition from normal to excursion)
+        int lastExcursionStartIndex = -1;
+        boolean wasInNormalRange = false;
+        for (int i = 0; i < htDataList.size(); i++) {
+            float temp = htDataList.get(i).getTemperature();
+            boolean isNormal = (temp >= 2.0f && temp <= 8.0f);
+            if (wasInNormalRange && !isNormal) {
+                lastExcursionStartIndex = i;
+            }
+            wasInNormalRange = isNormal;
+        }
+        
+        // If found, filter data from that point onward; else use all data
+        List<HtData> filteredData;
+        if (lastExcursionStartIndex != -1) {
+            filteredData = htDataList.subList(lastExcursionStartIndex, htDataList.size());
+            Log.d("BeaconRawData", "Filtered data from excursion start: " + filteredData.size() + " records");
+        } else {
+            filteredData = htDataList;
+            Log.d("BeaconRawData", "Using all data: " + filteredData.size() + " records");
+        }
+
+        // Clear previous data and add new data
+        processedHistoricalData.clear();
+        processedExcursionData.clear();
+        processedHistoricalData.addAll(filteredData);
+        
+        // Analyze excursions for local display
+        analyzeExcursionsForProcessedData(filteredData);
+        
+        // Mark processing as complete
+        isDataProcessingComplete = true;
+        
+        Log.d("BeaconRawData", "Data processing complete: " + processedHistoricalData.size() + 
+              " historical records, " + processedExcursionData.size() + " excursions");
+        
+        // Navigate to device details
+        navigateToDeviceDetails(batteryLevel, firmwareVersion, currentTemperature);
+    }
+
+    /**
+     * Handle case when no data is available and navigate
+     */
+    private void handleNoDataAndNavigate(int batteryLevel, String firmwareVersion, float currentTemperature) {
+        Log.d("BeaconRawData", "handleNoDataAndNavigate called");
+        
+        // Clear data and mark as complete even with no data
+        processedHistoricalData.clear();
+        processedExcursionData.clear();
+        isDataProcessingComplete = true;
+        
+        // Navigate to device details anyway
+        navigateToDeviceDetails(batteryLevel, firmwareVersion, currentTemperature);
+    }
+
+    /**
+     * Analyze excursions from processed data
+     */
+    private void analyzeExcursionsForProcessedData(List<HtData> htDataList) {
+        if (htDataList.isEmpty()) {
+            return;
+        }
+        
+        List<ExcursionData> excursions = new ArrayList<>();
+        
+        for (HtData htData : htDataList) {
+            float temperature = htData.getTemperature();
+            long timestamp = htData.getTimestamps();
+            
+            // Check if temperature is outside the 2-8°C range
+            if (temperature < 2.0f) {
+                // Low temperature excursion
+                ExcursionData excursion = new ExcursionData(temperature, timestamp, "LOW", mst03Entity.getMacAddress());
+                excursions.add(excursion);
+            } else if (temperature > 8.0f) {
+                // High temperature excursion
+                ExcursionData excursion = new ExcursionData(temperature, timestamp, "HIGH", mst03Entity.getMacAddress());
+                excursions.add(excursion);
+            }
+        }
+        
+        processedExcursionData.addAll(excursions);
+        Log.d("BeaconRawData", "Found " + excursions.size() + " excursions");
+    }
+
+    /**
+     * Navigate to DeviceDetailsActivity with device data
+     */
+    private void navigateToDeviceDetails(int batteryLevel, String firmwareVersion, float currentTemperature) {
+        Log.d("ScanDebug", "navigateToDeviceDetails called");
+        
+        runOnUiThread(() -> {
+            // Dismiss connection dialog
+            WaitDialog.dismiss();
+            
+            // Reset connection state
+            isConnecting = false;
+            mDevicesListAdapter.setConnectButtonsEnabled(true);
+            
+            // Navigate to device details screen with real device data
+            Intent intent = DeviceDetailsActivity.newIntent(ScanDevicesListActivity.this, mst03Entity, 
+                                                           batteryLevel, firmwareVersion, currentTemperature);
+            startActivity(intent);
+            
+            // Disconnect from device after navigation (with a small delay to ensure navigation completes)
+            Handler disconnectHandler = new Handler();
+            disconnectHandler.postDelayed(() -> {
+                if (mst03Entity != null && mBleManager != null) {
+                    mBleManager.disConnect(mst03Entity.getMacAddress());
+                    Log.d("ScanDebug", "Device disconnected after navigation");
+                }
+            }, 1000); // 1 second delay
+        });
+    }
+
+    // Add this method to improve connection timeout handling
+    private void startConnectionWithTimeout(MST03Entity device) {
+        Log.d("ScanDebug", "Starting connection with timeout for device: " + device.getMacAddress());
+        
+        // Clear any previous processed data
+        clearProcessedData();
+        
+        // Set connection timeout (increase to 12 seconds for data fetching)
+        connectionTimeoutHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (isConnecting) {
+                    Log.w("ScanDebug", "Connection timeout - proceeding with available data");
+                    isConnecting = false;
+                    mDevicesListAdapter.setConnectButtonsEnabled(true);
+                    WaitDialog.dismiss();
+                    
+                    // Extract basic device information for timeout navigation
+                    int batteryLevel = -1;
+                    String firmwareVersion = "Unknown";
+                    float currentTemperature = Float.NaN;
+                    
+                    if (device != null) {
+                        // Get device static info
+                        DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) device.getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
+                        if (deviceInfo != null) {
+                            batteryLevel = deviceInfo.getBattery();
+                            firmwareVersion = deviceInfo.getFirmwareVersion();
+                        }
+                        
+                        // Get current temperature from combination frame
+                        CombinationFrame comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.COMBINATION_FRAME);
+                        if (comboFrame != null) {
+                            currentTemperature = comboFrame.getTemperature();
+                        }
+                    }
+                    
+                    // Set empty data as complete and navigate
+                    isDataProcessingComplete = true;
+                    navigateToDeviceDetails(batteryLevel, firmwareVersion, currentTemperature);
+                }
+            }
+        }, 12000); // 12 second timeout (increased from 8 seconds)
+    }
+
+    // Helper method to handle connection errors
+    private void handleConnectionError(MST03Entity device, String errorMessage) {
+        isConnecting = false;
+        mDevicesListAdapter.setConnectButtonsEnabled(true);
+        WaitDialog.dismiss();
+        connectionTimeoutHandler.removeCallbacksAndMessages(null);
+        
+        Toast.makeText(this, "Connection failed: " + errorMessage, Toast.LENGTH_LONG).show();
+        
+        // Still navigate with basic device info even on connection error
+        int batteryLevel = -1;
+        String firmwareVersion = "Unknown";
+        float currentTemperature = Float.NaN;
+        
+        if (device != null) {
+            DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) device.getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
+            if (deviceInfo != null) {
+                batteryLevel = deviceInfo.getBattery();
+                firmwareVersion = deviceInfo.getFirmwareVersion();
+            }
+            
+            CombinationFrame comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.COMBINATION_FRAME);
+            if (comboFrame != null) {
+                currentTemperature = comboFrame.getTemperature();
+            }
+        }
+        
+        // Set empty data as complete and navigate
+        clearProcessedData();
+        isDataProcessingComplete = true;
+        navigateToDeviceDetails(batteryLevel, firmwareVersion, currentTemperature);
+    }
+
+    private void updateConnectionStatus(String status) {
+        Log.d("ScanDebug", "Connection status: " + status);
+        // You can add UI updates here if needed
+    }
 
     private void initBlePermission() {
         String[] requestPermissionList;
@@ -1220,200 +1453,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         mBleManager.setSecretKey(mac, key);
     }
 
-    private void connectedSensor() {
 
-        if (mst03Entity == null) {
-            Log.e("ScanDebug", "Device is null, cannot connect");
-            Toast.makeText(this, "Device not available", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        if (mst03Entity.getMinewFrame(com.minew.ble.v3.enums.FrameType.DEVICE_INFORMATION_FRAME) != null) {
-            currentDeviceStaticInfo = (DeviceStaticInfoFrame) mst03Entity
-                    .getMinewFrame(com.minew.ble.v3.enums.FrameType.DEVICE_INFORMATION_FRAME);
-        }
-
-        fetchHistoricalDataForLocalDisplay();
-    }
-
-    private void fetchHistoricalDataForLocalDisplay() {
-        Log.d("ScanDebug", "Starting historical data fetch");
-        
-        // Add a small delay to ensure device is fully ready
-        new android.os.Handler().postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                performHistoricalDataQuery();
-            }
-        }, 500); // Reduced from 1000ms to 500ms
-    }
-
-    private void performHistoricalDataQuery() {
-        try {
-            Log.d("ScanDebug", "Performing historical data query");
-            
-            isDataProcessingComplete = false;
-            updateProcessingStatus("Fetching");
-            
-            if (mst03Entity == null || mBleManager == null) {
-                Log.e("ScanDebug", "Device or BLE manager is null, cannot query data");
-                handleNoDataAvailable();
-                return;
-            }
-
-            long systemTime = System.currentTimeMillis() / 1000;
-            long startTime = systemTime - (24 * 60 * 60);
-            long endTime = systemTime;
-
-            Log.d("ScanDebug", "Querying data for device: " + mst03Entity.getMacAddress() +
-                    ", time range: " + startTime + " to " + endTime);
-
-            mBleManager.queryHistoryData(mst03Entity.getMacAddress(), 1, startTime, endTime, systemTime,
-                    new OnQueryResultListener<HistoryHtData>() {
-                        @Override
-                        public void OnQueryResult(boolean success, HistoryHtData historyHtData) {
-                            Log.d("ScanDebug", "Query result - success: " + success + ", data: " + 
-                                    (historyHtData != null ? historyHtData.getHistoryDataList().size() : "null"));
-                            
-                            if (success && historyHtData != null && !historyHtData.getHistoryDataList().isEmpty()) {
-                                Log.d("ScanDebug", "Historical data received: " + historyHtData.getHistoryDataList().size() + " records");
-                                processHistoricalDataForLocalDisplayUltraOptimized(historyHtData.getHistoryDataList());
-                            } else {
-                                Log.w("ScanDebug", "Primary query failed or returned no data, trying fallback");
-                                tryFallbackQuery(systemTime);
-                            }
-                        }
-                    });
-        } catch (Exception e) {
-            Log.e("ScanDebug", "Error in performHistoricalDataQuery: " + e.getMessage());
-            e.printStackTrace();
-            handleNoDataAvailable();
-        }
-    }
-
-    private void tryFallbackQuery(long systemTime) {
-        Log.d("BeaconRawData", "tryFallbackQuery called");
-
-        if (mst03Entity == null || mBleManager == null) {
-            Log.e("BeaconRawData", "Device or BLE manager is null in fallback query");
-            handleNoDataAvailable();
-            return;
-        }
-
-        try {
-
-            Log.d("BeaconRawData", "Attempting fallback query with different parameters");
-
-            mBleManager.queryHistoryData(mst03Entity.getMacAddress(), 0, 0, 0, systemTime,
-                    new OnQueryResultListener<HistoryHtData>() {
-                        @Override
-                        public void OnQueryResult(boolean fallbackSuccess, HistoryHtData fallbackHistoryHtData) {
-                            Log.d("BeaconRawData", "Fallback OnQueryResult called, success=" + fallbackSuccess
-                                    + ", historyHtData=" + fallbackHistoryHtData);
-
-                            if (fallbackSuccess && fallbackHistoryHtData != null) {
-                                List<HtData> fallbackData = fallbackHistoryHtData.getHistoryDataList();
-                                Log.d("BeaconRawData",
-                                        "Fallback query returned " + fallbackData.size() + " data points");
-
-                                if (fallbackData.isEmpty()) {
-                                    Log.w("BeaconRawData", "Fallback query also returned no data");
-
-                                    tryAlternativeQuery(systemTime);
-                                } else {
-                                    Log.d("BeaconRawData", "Fallback query successful, processing data");
-                                    processHistoricalDataForLocalDisplayUltraOptimized(fallbackData);
-                                }
-                            } else {
-                                Log.w("BeaconRawData", "Fallback query failed, trying alternative");
-                                tryAlternativeQuery(systemTime);
-                            }
-                        }
-                    });
-        } catch (Exception e) {
-            Log.e("BeaconRawData", "Exception during fallback query: " + e.getMessage());
-            e.printStackTrace();
-            tryAlternativeQuery(systemTime);
-        }
-    }
-
-    private void tryAlternativeQuery(long systemTime) {
-        Log.d("BeaconRawData", "tryAlternativeQuery called");
-
-        if (mst03Entity == null || mBleManager == null) {
-            Log.e("BeaconRawData", "Device or BLE manager is null in alternative query");
-            handleNoDataAvailable();
-            return;
-        }
-
-        try {
-
-            long startTime = systemTime - (7 * 24 * 60 * 60);
-            long endTime = systemTime;
-
-            Log.d("BeaconRawData", "Trying alternative query with 7-day range: " + startTime + " to " + endTime);
-
-            mBleManager.queryHistoryData(mst03Entity.getMacAddress(), 1, startTime, endTime, systemTime,
-                    new OnQueryResultListener<HistoryHtData>() {
-                        @Override
-                        public void OnQueryResult(boolean alternativeSuccess, HistoryHtData alternativeHistoryHtData) {
-                            Log.d("BeaconRawData", "Alternative OnQueryResult called, success=" + alternativeSuccess
-                                    + ", historyHtData=" + alternativeHistoryHtData);
-
-                            if (alternativeSuccess && alternativeHistoryHtData != null) {
-                                List<HtData> alternativeData = alternativeHistoryHtData.getHistoryDataList();
-                                Log.d("BeaconRawData",
-                                        "Alternative query returned " + alternativeData.size() + " data points");
-
-                                if (alternativeData.isEmpty()) {
-                                    Log.w("BeaconRawData", "All query attempts failed, no data available");
-                                    handleNoDataAvailable();
-                                } else {
-                                    Log.d("BeaconRawData", "Alternative query successful, processing data");
-                                    processHistoricalDataForLocalDisplayUltraOptimized(alternativeData);
-                                }
-                            } else {
-                                Log.w("BeaconRawData", "Alternative query also failed");
-                                handleNoDataAvailable();
-                            }
-                        }
-                    });
-        } catch (Exception e) {
-            Log.e("BeaconRawData", "Exception during alternative query: " + e.getMessage());
-            e.printStackTrace();
-            handleNoDataAvailable();
-        }
-    }
-
-    private void handleNoDataAvailable() {
-        Log.w("ScanDebug", "No historical data available for device: " + 
-                (mst03Entity != null ? mst03Entity.getMacAddress() : "null"));
-        
-        // Ensure we have some basic data even if no historical data
-        synchronized (processedHistoricalData) {
-            if (processedHistoricalData.isEmpty()) {
-                Log.d("ScanDebug", "Setting empty processed data to prevent null issues");
-                // Don't add empty data, just ensure the list exists
-            }
-        }
-        
-        updateProcessingStatus("Completed - No Data");
-        isDataProcessingComplete = true;
-        Log.d("ScanDebug", "Data processing marked as complete (no data available)");
-        
-        // Provide user feedback
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                Toast.makeText(ScanDevicesListActivity.this, 
-                        "No historical data found. The device may be new or have no recorded data.", 
-                        Toast.LENGTH_LONG).show();
-            }
-        });
-        
-        // Don't disconnect immediately, let the activity launch with no data
-        Log.d("ScanDebug", "Allowing activity to launch with no data");
-    }
 
     private void processHistoricalDataForLocalDisplayUltraOptimized(List<HtData> htDataList) {
         try {
@@ -2284,76 +2324,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         return currentProcessingStatus;
     }
 
-    private void startDataFetchingAndLaunchActivity(int batteryLevel, String firmwareVersion,
-            float currentTemperature) {
-        Log.d("ScanDebug", "Starting data fetching with activity launch");
 
-        // Set flag to prevent double launch
-        isActivityLaunched = true;
-
-        WaitDialog.show("");
-
-        // Reduce delay to ensure faster data fetching
-        new android.os.Handler().postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                if (mst03Entity != null) {
-                    Log.d("ScanDebug", "Device is ready, proceeding with data fetch");
-                    connectedSensor();
-
-                    waitForDataProcessingAndLaunchActivity(batteryLevel, firmwareVersion, currentTemperature);
-                } else {
-                    Log.w("ScanDebug", "Device is null, launching activity without data");
-                    WaitDialog.dismiss();
-                    Intent intent = DeviceDetailsActivity.newIntent(ScanDevicesListActivity.this, mst03Entity,
-                            batteryLevel, firmwareVersion, currentTemperature);
-                    startActivity(intent);
-                }
-            }
-        }, 200); // Reduced from 500ms to 200ms
-    }
-
-    private void waitForDataProcessingAndLaunchActivity(int batteryLevel, String firmwareVersion,
-            float currentTemperature) {
-
-        final android.os.Handler checkHandler = new android.os.Handler();
-        final Runnable checkRunnable = new Runnable() {
-            @Override
-            public void run() {
-                if (isDataProcessingComplete) {
-                    Log.d("ScanDebug", "Data processing complete, launching DeviceDetailsActivity");
-                    WaitDialog.dismiss();
-
-                    Intent intent = DeviceDetailsActivity.newIntent(ScanDevicesListActivity.this, mst03Entity,
-                            batteryLevel, firmwareVersion, currentTemperature);
-                    startActivity(intent);
-                } else {
-                    Log.d("ScanDebug", "Data processing not complete yet, waiting...");
-
-                    checkHandler.postDelayed(this, 300); // Reduced from 500ms to 300ms
-                }
-            }
-        };
-
-        // Start checking sooner
-        checkHandler.postDelayed(checkRunnable, 1000); // Reduced from 2000ms to 1000ms
-
-        // Reduce timeout to launch activity faster
-        new android.os.Handler().postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                checkHandler.removeCallbacks(checkRunnable);
-                if (!isDataProcessingComplete) {
-                    Log.w("ScanDebug", "Data processing timeout, launching activity anyway");
-                    WaitDialog.dismiss();
-
-                    Intent intent = DeviceDetailsActivity.newIntent(ScanDevicesListActivity.this, mst03Entity,
-                            batteryLevel, firmwareVersion, currentTemperature);
-                    startActivity(intent);
-                }
-            }
-        }, 8000); // Reduced from 15000ms to 8000ms
-    }
 
     private java.text.SimpleDateFormat getLocaleAwareCSVDateFormat() {
         // Get the actual date format pattern from device settings
