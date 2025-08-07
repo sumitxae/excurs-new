@@ -663,7 +663,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         mDevicesListAdapter.setConnectButtonsEnabled(false);
         
         // Show connection dialog
-        WaitDialog.show("Connecting to device...");
+        WaitDialog.show("");
         
         // Start connection with improved timeout handling
         startConnectionWithTimeout(device);
@@ -1077,6 +1077,13 @@ public class ScanDevicesListActivity extends BaseActivity {
             Log.d("BeaconRawData", "Using all data: " + filteredData.size() + " records");
         }
 
+        // Store the complete dataset for CSV generation
+        synchronized (completeHistoricalData) {
+            completeHistoricalData.clear();
+            completeHistoricalData.addAll(htDataList);
+            Log.d("BeaconRawData", "Stored complete historical data: " + completeHistoricalData.size() + " records");
+        }
+        
         // Clear previous data and add new data
         processedHistoricalData.clear();
         processedExcursionData.clear();
@@ -1084,6 +1091,22 @@ public class ScanDevicesListActivity extends BaseActivity {
         
         // Analyze excursions for local display
         analyzeExcursionsForProcessedData(filteredData);
+        
+        // Generate CSV automatically with complete historical data
+        synchronized (completeHistoricalData) {
+            Log.d("BeaconRawData", "Checking completeHistoricalData size: " + completeHistoricalData.size());
+            if (!completeHistoricalData.isEmpty()) {
+                Log.d("BeaconRawData", "Generating CSV with complete historical data: " + completeHistoricalData.size() + " records");
+                generateTripDataCSV(completeHistoricalData, processedExcursionData);
+            } else {
+                Log.d("BeaconRawData", "No complete historical data available for CSV generation");
+                // Try to generate CSV with the original data if complete data is empty
+                if (!htDataList.isEmpty()) {
+                    Log.d("BeaconRawData", "Falling back to original data for CSV generation: " + htDataList.size() + " records");
+                    generateTripDataCSV(htDataList, processedExcursionData);
+                }
+            }
+        }
         
         // Mark processing as complete
         isDataProcessingComplete = true;
@@ -1093,6 +1116,12 @@ public class ScanDevicesListActivity extends BaseActivity {
         
         // Navigate to device details
         navigateToDeviceDetails(batteryLevel, firmwareVersion, currentTemperature);
+        
+        // Force CSV generation for testing (remove this after testing)
+        if (!htDataList.isEmpty()) {
+            Log.d("BeaconRawData", "FORCE TEST: Generating CSV with original data: " + htDataList.size() + " records");
+            generateTripDataCSV(htDataList, processedExcursionData);
+        }
     }
 
     /**
@@ -1105,6 +1134,17 @@ public class ScanDevicesListActivity extends BaseActivity {
         processedHistoricalData.clear();
         processedExcursionData.clear();
         isDataProcessingComplete = true;
+        
+        // Try to generate CSV with complete historical data
+        Log.d("BeaconRawData", "Attempting CSV generation with available data");
+        synchronized (completeHistoricalData) {
+            if (!completeHistoricalData.isEmpty()) {
+                Log.d("BeaconRawData", "Generating CSV with complete historical data: " + completeHistoricalData.size() + " records");
+                generateTripDataCSV(completeHistoricalData, processedExcursionData);
+            } else {
+                Log.d("BeaconRawData", "No complete historical data available for CSV generation");
+            }
+        }
         
         // Navigate to device details anyway
         navigateToDeviceDetails(batteryLevel, firmwareVersion, currentTemperature);
@@ -1209,6 +1249,18 @@ public class ScanDevicesListActivity extends BaseActivity {
                     
                     // Set empty data as complete and navigate
                     isDataProcessingComplete = true;
+                    
+                    // Try to generate CSV with complete historical data
+                    Log.d("BeaconRawData", "Attempting CSV generation on connection timeout");
+                    synchronized (completeHistoricalData) {
+                        if (!completeHistoricalData.isEmpty()) {
+                            Log.d("BeaconRawData", "Generating CSV with complete historical data on timeout: " + completeHistoricalData.size() + " records");
+                            generateTripDataCSV(completeHistoricalData, processedExcursionData);
+                        } else {
+                            Log.d("BeaconRawData", "No complete historical data available for CSV generation on timeout");
+                        }
+                    }
+                    
                     navigateToDeviceDetails(batteryLevel, firmwareVersion, currentTemperature);
                 }
             }
@@ -1245,6 +1297,18 @@ public class ScanDevicesListActivity extends BaseActivity {
         // Set empty data as complete and navigate
         clearProcessedData();
         isDataProcessingComplete = true;
+        
+        // Try to generate CSV with complete historical data
+        Log.d("BeaconRawData", "Attempting CSV generation on connection error");
+        synchronized (completeHistoricalData) {
+            if (!completeHistoricalData.isEmpty()) {
+                Log.d("BeaconRawData", "Generating CSV with complete historical data on error: " + completeHistoricalData.size() + " records");
+                generateTripDataCSV(completeHistoricalData, processedExcursionData);
+            } else {
+                Log.d("BeaconRawData", "No complete historical data available for CSV generation on error");
+            }
+        }
+        
         navigateToDeviceDetails(batteryLevel, firmwareVersion, currentTemperature);
     }
 
@@ -1595,6 +1659,16 @@ public class ScanDevicesListActivity extends BaseActivity {
 
             // Process the data and ensure completion flag is set
             processHistoricalDataForTripDetectionAdaptive(htDataList);
+            
+            // Generate CSV automatically with complete historical data
+            synchronized (completeHistoricalData) {
+                if (!completeHistoricalData.isEmpty()) {
+                    Log.d("BeaconRawData", "Generating CSV with complete historical data: " + completeHistoricalData.size() + " records");
+                    generateTripDataCSV(completeHistoricalData, processedExcursionData);
+                } else {
+                    Log.d("BeaconRawData", "No complete historical data available for CSV generation");
+                }
+            }
             
             // Ensure completion flag is set even if processing doesn't set it
             if (!isDataProcessingComplete) {
@@ -2002,6 +2076,7 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
 
     private void generateTripDataCSV(List<HtData> tripData, List<ExcursionData> tripExcursions) {
+        Log.d("BeaconRawData", "generateTripDataCSV called with " + tripData.size() + " records and " + tripExcursions.size() + " excursions");
         try {
 
             String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
@@ -2081,6 +2156,14 @@ public class ScanDevicesListActivity extends BaseActivity {
             Log.d("BeaconRawData",
                     "Trip data: " + tripData.size() + " records, " + tripExcursions.size() + " excursions");
             Log.d("BeaconRawData", "Trip duration: " + tripDurationMinutes + " minutes");
+
+            // Show success message to user
+            runOnUiThread(() -> {
+                String message = tripData.isEmpty() ? 
+                    "CSV file generated (no data available)" : 
+                    "CSV file generated with " + tripData.size() + " records";
+                Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+            });
 
             final String finalFileName = fileName;
             final String fileParent = csvFile.getParent();
@@ -2286,14 +2369,14 @@ public class ScanDevicesListActivity extends BaseActivity {
         }
 
         if (csvData.isEmpty()) {
-            Toast.makeText(this, "No complete data available. Please connect to a device first.", Toast.LENGTH_LONG)
+            Toast.makeText(this, "No complete historical data available. Please connect to a device first.", Toast.LENGTH_LONG)
                     .show();
             return;
         }
 
         List<ExcursionData> tripExcursions = new ArrayList<>(processedExcursionData);
 
-        Log.d("BeaconRawData", "Generating CSV with complete dataset: " + csvData.size() + " records");
+        Log.d("BeaconRawData", "Generating CSV with complete historical dataset: " + csvData.size() + " records");
         generateTripDataCSV(csvData, tripExcursions);
     }
 
