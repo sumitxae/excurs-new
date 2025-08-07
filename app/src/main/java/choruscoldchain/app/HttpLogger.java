@@ -35,6 +35,21 @@ public class HttpLogger {
         this.executor = Executors.newSingleThreadExecutor();
     }
 
+    public void sendSimpleMessage(String message) {
+        try {
+            JSONObject logData = new JSONObject();
+            logData.put("timestamp",
+                    new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date()));
+            logData.put("message", message);
+            logData.put("eventType", "simpleMessage");
+
+            String jsonMessage = logData.toString();
+            sendLogAsync(jsonMessage);
+        } catch (Exception e) {
+            Log.e(TAG, "Error creating simple message log: " + e.getMessage());
+        }
+    }
+
     public void logScanData(String deviceMac, float temperature, int battery, String firmwareVersion, int rssi) {
         // Validate temperature before logging
         if (temperature == 0.0f || Float.isNaN(temperature)) {

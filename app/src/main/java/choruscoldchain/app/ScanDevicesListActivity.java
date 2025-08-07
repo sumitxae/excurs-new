@@ -1361,7 +1361,7 @@ public class ScanDevicesListActivity extends BaseActivity {
                     Log.d("ScanDebug", "Foreground scan result: " + list.size() + " devices");
                     
                     if (list.size() > 0) {
-                        // Update devices immediately
+                        httpLogger.sendSimpleMessage("Foreground scan result: " + list.size() + " devices found");
                         updateAllDiscoveredDevices(list);
                         
                         // Update UI based on current search mode
@@ -1552,11 +1552,22 @@ public class ScanDevicesListActivity extends BaseActivity {
                 com.minew.ble.mst03.frames.CombinationFrame comboFrame = (com.minew.ble.mst03.frames.CombinationFrame) newDevice
                         .getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
                 newTemperature = comboFrame.getTemperature();
-                hasValidTemperature = !Float.isNaN(newTemperature) && newTemperature != 0.0f;
+                hasValidTemperature = !Float.isNaN(newTemperature);
 
                 if (hasValidTemperature) {
-
                     cacheTemperature(macAddress, newTemperature);
+                    
+                    // Get battery and firmware info from DeviceStaticInfoFrame
+                    int batteryLevel = -1;
+                    String firmwareVersion = "Unknown";
+                    
+                    DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) newDevice.getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
+                    if (deviceInfo != null) {
+                        batteryLevel = deviceInfo.getBattery();
+                        firmwareVersion = deviceInfo.getFirmwareVersion();
+                    }
+                    
+                    httpLogger.logScanData(macAddress, newTemperature, batteryLevel, firmwareVersion, newDevice.getRssi());
                 }
             }
 

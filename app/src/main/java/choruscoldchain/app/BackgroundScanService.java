@@ -337,6 +337,7 @@ public class BackgroundScanService extends Service {
             mBleManager.startScan(this, SCAN_DURATION, new OnScanDevicesResultListener<MST03Entity>() {
                 @Override
                 public void onScanResult(List<MST03Entity> list) {
+                    httpLogger.sendSimpleMessage("Background scan result: " + list.size() + " devices found");
                     Log.d(TAG, "Background scan result: " + list.size() + " devices found");
                     
                     if (list.size() > 0) {
