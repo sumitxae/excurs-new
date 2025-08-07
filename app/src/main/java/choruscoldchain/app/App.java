@@ -22,7 +22,6 @@ public class App extends Application {
         // Log installation information
 
         Log.i(TAG, "App started with " + installationIdManager.getInstallationInfo());
-        Toast.makeText(this,"App ID: " + installationIdManager.getInstallationId(), Toast.LENGTH_LONG).show();
     }
     
     /**

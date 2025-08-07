@@ -2798,10 +2798,6 @@ public class ScanDevicesListActivity extends BaseActivity {
                         
                         // Use the existing checkoutBluetooth method which handles all states correctly
                         checkoutBluetooth();
-                        
-                        // Show a toast to inform user
-                        Toast.makeText(ScanDevicesListActivity.this, 
-                            "Bluetooth scanning resumed", Toast.LENGTH_SHORT).show();
                     }
                 }
             }, 2000); // Wait 2 seconds for Bluetooth to stabilize
