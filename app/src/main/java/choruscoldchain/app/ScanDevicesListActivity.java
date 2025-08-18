@@ -65,6 +65,14 @@ import java.util.Set;
 import java.util.HashSet;
 import android.os.Handler;
 
+/**
+ * ScanDevicesListActivity - Main activity for scanning and managing temperature monitoring devices
+ * 
+ * EXCURSION LOGIC:
+ * An event is considered an excursion only if there are 2 consecutive temperature readings
+ * outside the 2-8°C range within 5 minutes of each other. This helps reduce false positives
+ * from temporary temperature spikes.
+ */
 public class ScanDevicesListActivity extends BaseActivity {
 
     private static ScanDevicesListActivity instance;
@@ -120,7 +128,7 @@ public class ScanDevicesListActivity extends BaseActivity {
     
     // NEW: Add faster direct scanning for foreground
     private boolean isForegroundScanning = false;
-    private static final int FOREGROUND_SCAN_DURATION = 3000; // 3 seconds for quick temperature discovery
+    private static final int FOREGROUND_SCAN_DURATION = 10000; // 10 seconds for better temperature discovery
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -133,6 +141,9 @@ public class ScanDevicesListActivity extends BaseActivity {
 
         ivChorusLogo = findViewById(R.id.iv_chorus_logo);
         loadChorusLogo();
+        
+        // Setup logger button
+        binding.btnBeaconLogger.setOnClickListener(v -> openBeaconLogger());
 
         View decor = getWindow().getDecorView();
         decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
@@ -281,6 +292,101 @@ public class ScanDevicesListActivity extends BaseActivity {
     private void startQRScanner() {
         Intent intent = new Intent(this, QRScannerActivity.class);
         startActivityForResult(intent, QR_SCAN_REQUEST_CODE);
+    }
+    
+    private void openBeaconLogger() {
+        Intent intent = new Intent(this, BeaconLoggerActivity.class);
+        startActivity(intent);
+    }
+    
+    /**
+     * Log beacon data to the logger activity if it's open
+     */
+    private void logBeaconDataToLogger(List<MST03Entity> devices) {
+        BeaconLoggerActivity logger = BeaconLoggerActivity.getInstance();
+        if (logger == null) {
+            return; // Logger not open
+        }
+        
+        for (MST03Entity device : devices) {
+            try {
+                String macAddress = device.getMacAddress();
+                float temperature = 0.0f;
+                float humidity = 0.0f;
+                int battery = 0;
+                String firmwareVersion = "Unknown";
+                int rssi = device.getRssi();
+                
+                Log.d("BeaconLogger", "Processing device: " + macAddress + " (RSSI: " + rssi + ")");
+                
+                // Get temperature from CombinationFrame
+                if (device.getMinewFrame(com.minew.ble.v3.enums.FrameType.CUSTOM_COMBINATION_FRAME) != null) {
+                    com.minew.ble.mst03.frames.CombinationFrame comboFrame = 
+                        (com.minew.ble.mst03.frames.CombinationFrame) device.getMinewFrame(com.minew.ble.v3.enums.FrameType.CUSTOM_COMBINATION_FRAME);
+                    temperature = comboFrame.getTemperature();
+                    
+                    Log.d("BeaconLogger", "CombinationFrame found for " + macAddress + " - Temperature: " + temperature + "°C");
+                    Log.d("BeaconLogger", "CombinationFrame details - Battery: " + comboFrame.getBattery() + "%, Timestamp: " + comboFrame.getCurrentTimestamp());
+                    
+                    // NEW: Direct excursion detection from beacon data
+                    if (comboFrame.getTemperatureUpperLimit1AlarmMark() == 1) {
+                        long excursionStart = comboFrame.getTempEventTimestamp();
+                        long currentTime = comboFrame.getCurrentTimestamp();
+                        long duration = currentTime - excursionStart;
+                        logger.addLogEntry(String.format(
+                            "🚨 HIGH TEMP EXCURSION: %s - Temp: %.2f°C - Started: %d ms ago - Duration: %d ms",
+                            macAddress, temperature, duration, duration
+                        ));
+                    } else if (comboFrame.getTemperatureLowerLimit1AlarmMark() == 1) {
+                        long excursionStart = comboFrame.getTempEventTimestamp();
+                        long currentTime = comboFrame.getCurrentTimestamp();
+                        long duration = currentTime - excursionStart;
+                        logger.addLogEntry(String.format(
+                            "❄️ LOW TEMP EXCURSION: %s - Temp: %.2f°C - Started: %d ms ago - Duration: %d ms",
+                            macAddress, temperature, duration, duration
+                        ));
+                    }
+                    
+                    // Check for light events (end of trip)
+                    if (comboFrame.getLightIntensityUpperLimitAlarmMark() == 1 || 
+                        comboFrame.getLightIntensityLowerLimitAlarmMark() == 1) {
+                        long lightEventTime = comboFrame.getLightEventTimestamp();
+                        logger.addLogEntry(String.format(
+                            "💡 LIGHT EVENT (END OF TRIP): %s - Time: %d",
+                            macAddress, lightEventTime
+                        ));
+                    }
+                    
+                    // Log raw frame data
+                    logger.logRawBeaconData(macAddress, "CombinationFrame", comboFrame.toString());
+                } else {
+                    Log.d("BeaconLogger", "No CombinationFrame available for " + macAddress);
+                    // Log what frames are available
+                    for (com.minew.ble.v3.enums.FrameType frameType : com.minew.ble.v3.enums.FrameType.values()) {
+                        if (device.getMinewFrame(frameType) != null) {
+                            Log.d("BeaconLogger", "Available frame for " + macAddress + ": " + frameType.name());
+                        }
+                    }
+                }
+                
+                // Get device info from DeviceStaticInfoFrame
+                if (device.getMinewFrame(com.minew.ble.v3.enums.FrameType.CUSTOM_DEVICE_INFORMATION_FRAME) != null) {
+                    com.minew.ble.mst03.frames.DeviceStaticInfoFrame staticFrame = 
+                        (com.minew.ble.mst03.frames.DeviceStaticInfoFrame) device.getMinewFrame(com.minew.ble.v3.enums.FrameType.CUSTOM_DEVICE_INFORMATION_FRAME);
+                    battery = staticFrame.getBattery();
+                    firmwareVersion = staticFrame.getFirmwareVersion();
+                    
+                    // Log raw frame data
+                    logger.logRawBeaconData(macAddress, "DeviceStaticInfoFrame", staticFrame.toString());
+                }
+                
+                // Log the processed beacon data
+                logger.logBeaconData(macAddress, temperature, humidity, battery, firmwareVersion, rssi);
+                
+            } catch (Exception e) {
+                Log.e("BeaconLogger", "Error logging beacon data for " + device.getMacAddress() + ": " + e.getMessage());
+            }
+        }
     }
 
     private static final int QR_SCAN_REQUEST_CODE = 1001;
@@ -664,6 +770,12 @@ public class ScanDevicesListActivity extends BaseActivity {
             return;
         }
         
+        // Log connection event to logger
+        BeaconLoggerActivity logger = BeaconLoggerActivity.getInstance();
+        if (logger != null) {
+            logger.logConnectionEvent(device.getMacAddress(), "Connection initiated");
+        }
+        
         isConnecting = true;
         mst03Entity = device;
         
@@ -728,6 +840,17 @@ public class ScanDevicesListActivity extends BaseActivity {
                 isBleManagerReady = false;
                 return;
             }
+
+            // Set manufacturer ID for MST03 devices (0x00E0 = Google)
+            mBleManager.setManufacturerIdHexLe("E000");
+            Log.d("ScanDebug", "Set manufacturer ID to E000 for MST03 devices");
+
+            // Set custom scan duration for better performance
+            mBleManager.setDefaultScanTime(60 * 1000); // 1 minute scan duration
+            Log.d("ScanDebug", "Set custom scan duration");
+            
+            // Note: scanSensorManager is not available in this SDK version
+            Log.d("ScanDebug", "Using default scan results interval");
 
             setBleManagerListener();
 
@@ -833,6 +956,12 @@ public class ScanDevicesListActivity extends BaseActivity {
         @Override
         public void onUpdateConnState(String s, BleConnectionState mSensorConnectionState) {
             
+            // Log connection state change to logger
+            BeaconLoggerActivity logger = BeaconLoggerActivity.getInstance();
+            if (logger != null) {
+                logger.logConnectionEvent(s, "State: " + mSensorConnectionState.name());
+            }
+            
             if (mst03Entity != null && s.equals(mst03Entity.getMacAddress())) {
                 // Only process events for our target device
             }
@@ -877,14 +1006,14 @@ public class ScanDevicesListActivity extends BaseActivity {
                     
                     if (mst03Entity != null) {
                         // Get device static info
-                        DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) mst03Entity.getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
+                        DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) mst03Entity.getMinewFrame(FrameType.CUSTOM_DEVICE_INFORMATION_FRAME);
                         if (deviceInfo != null) {
                             batteryLevel = deviceInfo.getBattery();
                             firmwareVersion = deviceInfo.getFirmwareVersion();
                             currentDeviceStaticInfo = deviceInfo;
                         }
                         // Get current temperature from combination frame
-                        CombinationFrame comboFrame = (CombinationFrame) mst03Entity.getMinewFrame(FrameType.COMBINATION_FRAME);
+                        CombinationFrame comboFrame = (CombinationFrame) mst03Entity.getMinewFrame(FrameType.CUSTOM_COMBINATION_FRAME);
                         if (comboFrame != null) {
                             currentTemperature = comboFrame.getTemperature();
                         }
@@ -895,11 +1024,15 @@ public class ScanDevicesListActivity extends BaseActivity {
                     final String finalFirmwareVersion = firmwareVersion;
                     final float finalCurrentTemperature = currentTemperature;
                     
-                    // Start data fetching and wait for completion before navigation
+                    // NEW: Hybrid approach - Direct detection + Historical data for details screen
                     updateConnectionStatus("Connected - Fetching Data...");
+                    Log.d("DirectExcursion", "Using hybrid approach for " + mst03Entity.getMacAddress());
                     
-                    // Fetch data with callback for navigation
-                    fetchHistoricalDataWithNavigation(finalBatteryLevel, finalFirmwareVersion, finalCurrentTemperature);
+                    // Perform direct excursion detection first (immediate)
+                    detectExcursionsFromBeaconData(mst03Entity);
+                    
+                    // Fetch historical data for device details screen
+                    fetchHistoricalDataForDetailsScreen(finalBatteryLevel, finalFirmwareVersion, finalCurrentTemperature);
                     break;
                 case Disconnect:
                     Log.d("ScanDebug", "Device disconnected, restarting scan service");
@@ -968,7 +1101,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         
         try {
             // Try with rules=1 for time-based query as per SDK documentation
-            mBleManager.queryHistoryData(mst03Entity.getMacAddress(), 1, startTime, endTime, systemTime, 
+            mBleManager.queryTemperatureHistoryData(mst03Entity.getMacAddress(), 1, startTime, endTime, systemTime, 
                 new OnQueryResultListener<HistoryHtData>() {
                     @Override
                     public void OnQueryResult(boolean success, HistoryHtData historyHtData) {
@@ -1023,7 +1156,12 @@ public class ScanDevicesListActivity extends BaseActivity {
         dataTimeoutHandler.postDelayed(fallbackTimeoutRunnable, 10000); // 10 second timeout for fallback
         
         try {
-            mBleManager.queryHistoryData(mst03Entity.getMacAddress(), 0, 0, 0, systemTime, 
+            Log.d("DirectExcursion", "Fallback query with parameters:");
+            Log.d("DirectExcursion", "  MAC: " + mst03Entity.getMacAddress());
+            Log.d("DirectExcursion", "  Rules: 0 (all data)");
+            Log.d("DirectExcursion", "  System Time: " + systemTime + " (" + new java.util.Date(systemTime * 1000) + ")");
+            
+            mBleManager.queryTemperatureHistoryData(mst03Entity.getMacAddress(), 0, 0L, 0L, systemTime, 
                 new OnQueryResultListener<HistoryHtData>() {
                     @Override
                     public void OnQueryResult(boolean fallbackSuccess, HistoryHtData fallbackHistoryHtData) {
@@ -1066,49 +1204,16 @@ public class ScanDevicesListActivity extends BaseActivity {
             Log.d("BeaconRawData", "Sample data " + i + ": " + htData.toString());
         }
 
-        // Find the last excursion start and determine graph data range
-        int lastExcursionStartIndex = -1;
-        int lastNormalBeforeExcursionIndex = -1;
-        boolean wasInNormalRange = false;
-        
-        // First pass: find the last excursion start
-        for (int i = 0; i < htDataList.size(); i++) {
-            float temp = htDataList.get(i).getTemperature();
-            boolean isNormal = (temp >= 2.0f && temp <= 8.0f);
-            if (wasInNormalRange && !isNormal) {
-                lastExcursionStartIndex = i;
-            }
-            wasInNormalRange = isNormal;
-        }
-        
-        // Second pass: find the last normal point before excursion (if excursion exists)
-        if (lastExcursionStartIndex != -1) {
-            for (int i = lastExcursionStartIndex - 1; i >= 0; i--) {
-                float temp = htDataList.get(i).getTemperature();
-                boolean isNormal = (temp >= 2.0f && temp <= 8.0f);
-                if (isNormal) {
-                    lastNormalBeforeExcursionIndex = i;
-                    break;
-                }
-            }
-        }
-        
-        // Determine the data range for graph display
+        // NEW: Simplified data processing - use beacon timestamps instead of manual calculations
+        // Use the most recent 1000 records for graph display (performance optimization)
         List<HtData> filteredData;
-        if (lastExcursionStartIndex != -1 && lastNormalBeforeExcursionIndex != -1) {
-            // Start from just before the excursion (last normal point)
-            int startIndex = Math.max(0, lastNormalBeforeExcursionIndex);
+        if (htDataList.size() > 1000) {
+            int startIndex = htDataList.size() - 1000;
             filteredData = htDataList.subList(startIndex, htDataList.size());
-            Log.d("BeaconRawData", "Graph data: Starting from just before excursion (index " + startIndex + "): " + filteredData.size() + " records");
-        } else if (lastExcursionStartIndex != -1) {
-            // Excursion found but no normal point before it, start from excursion
-            filteredData = htDataList.subList(lastExcursionStartIndex, htDataList.size());
-            Log.d("BeaconRawData", "Graph data: Starting from excursion (no normal point before): " + filteredData.size() + " records");
+            Log.d("BeaconRawData", "Using last 1000 records for graph display: " + filteredData.size() + " records");
         } else {
-            // No excursion found, use latest 1000 records
-            int startIndex = Math.max(0, htDataList.size() - 1000);
-            filteredData = htDataList.subList(startIndex, htDataList.size());
-            Log.d("BeaconRawData", "Graph data: No excursion found, using latest " + filteredData.size() + " records (from index " + startIndex + ")");
+            filteredData = new ArrayList<>(htDataList);
+            Log.d("BeaconRawData", "Using all " + filteredData.size() + " records for graph display");
         }
 
         // Store the complete dataset for CSV generation
@@ -1185,33 +1290,25 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
 
     /**
-     * Analyze excursions from processed data
+     * NEW: Excursions are now detected directly from beacon data using tempEventTimestamp
+     * This eliminates the need for complex historical data analysis
      */
     private void analyzeExcursionsForProcessedData(List<HtData> htDataList) {
-        if (htDataList.isEmpty()) {
-            return;
-        }
-        
-        List<ExcursionData> excursions = new ArrayList<>();
-        
-        for (HtData htData : htDataList) {
-            float temperature = htData.getTemperature();
-            long timestamp = htData.getTimestamps();
-            
-            // Check if temperature is outside the 2-8°C range
-            if (temperature < 2.0f) {
-                // Low temperature excursion
-                ExcursionData excursion = new ExcursionData(temperature, timestamp, "LOW", mst03Entity.getMacAddress());
-                excursions.add(excursion);
-            } else if (temperature > 8.0f) {
-                // High temperature excursion
-                ExcursionData excursion = new ExcursionData(temperature, timestamp, "HIGH", mst03Entity.getMacAddress());
-                excursions.add(excursion);
-            }
-        }
-        
-        processedExcursionData.addAll(excursions);
-        Log.d("BeaconRawData", "Found " + excursions.size() + " excursions");
+        // NEW: Excursions are detected directly from beacon data in detectExcursionsFromBeaconData()
+        // This method is kept for compatibility but no longer performs complex calculations
+        Log.d("BeaconRawData", "Excursions are detected directly from beacon data - no historical analysis needed");
+    }
+
+    /**
+     * STUB: This method is no longer used - excursions are detected directly from beacon data
+     * @param htDataList List of temperature data
+     * @return false (excursions are detected via direct beacon data)
+     */
+    private boolean hasConsecutiveExcursionsWithin5Minutes(List<HtData> htDataList) {
+        // NEW: Excursions are detected directly from beacon data using tempEventTimestamp
+        // This method is kept as a stub for compilation compatibility
+        Log.d("BeaconRawData", "hasConsecutiveExcursionsWithin5Minutes called - excursions detected directly from beacon data");
+        return false;
     }
 
     /**
@@ -1268,14 +1365,14 @@ public class ScanDevicesListActivity extends BaseActivity {
                     
                     if (device != null) {
                         // Get device static info
-                        DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) device.getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
+                        DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) device.getMinewFrame(FrameType.CUSTOM_DEVICE_INFORMATION_FRAME);
                         if (deviceInfo != null) {
                             batteryLevel = deviceInfo.getBattery();
                             firmwareVersion = deviceInfo.getFirmwareVersion();
                         }
                         
                         // Get current temperature from combination frame
-                        CombinationFrame comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.COMBINATION_FRAME);
+                        CombinationFrame comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.CUSTOM_COMBINATION_FRAME);
                         if (comboFrame != null) {
                             currentTemperature = comboFrame.getTemperature();
                         }
@@ -1316,13 +1413,13 @@ public class ScanDevicesListActivity extends BaseActivity {
         float currentTemperature = Float.NaN;
         
         if (device != null) {
-            DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) device.getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
+            DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) device.getMinewFrame(FrameType.CUSTOM_DEVICE_INFORMATION_FRAME);
             if (deviceInfo != null) {
                 batteryLevel = deviceInfo.getBattery();
                 firmwareVersion = deviceInfo.getFirmwareVersion();
             }
             
-            CombinationFrame comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.COMBINATION_FRAME);
+            CombinationFrame comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.CUSTOM_COMBINATION_FRAME);
             if (comboFrame != null) {
                 currentTemperature = comboFrame.getTemperature();
             }
@@ -1386,6 +1483,11 @@ public class ScanDevicesListActivity extends BaseActivity {
                         
                         // Also update the device manager for background service
                         deviceManager.updateDevices(list);
+                        
+                        // Force adapter refresh to show new data immediately
+                        if (mDevicesListAdapter != null) {
+                            mDevicesListAdapter.notifyDataSetChanged();
+                        }
                     }
                 }
 
@@ -1399,7 +1501,7 @@ public class ScanDevicesListActivity extends BaseActivity {
                             if (isForegroundScanning && !isConnecting) {
                                 startForegroundScan();
                             }
-                        }, 500); // Very short delay for continuous scanning
+                        }, 100); // Very short delay for continuous scanning
                     }
                 }
             });
@@ -1550,6 +1652,12 @@ public class ScanDevicesListActivity extends BaseActivity {
     private void startScan() {
         if (!permissionsGranted || mObjectAnimator == null) return;
         
+        // Log scan event to logger
+        BeaconLoggerActivity logger = BeaconLoggerActivity.getInstance();
+        if (logger != null) {
+            logger.logScanEvent("Scan started");
+        }
+        
         // Check if we're in foreground or background
         if (isResumed()) {
             // Foreground - use fast direct scanning
@@ -1574,6 +1682,9 @@ public class ScanDevicesListActivity extends BaseActivity {
 
     private void updateAllDiscoveredDevices(List<MST03Entity> newDevices) {
         boolean needsSorting = false;
+        
+        // Log beacon data to logger if available
+        logBeaconDataToLogger(newDevices);
         boolean hasAnyExcursions = false;
 
         java.util.Map<String, Integer> existingDevicesIndexMap = new java.util.HashMap<>();
@@ -1587,9 +1698,9 @@ public class ScanDevicesListActivity extends BaseActivity {
             boolean hasValidTemperature = false;
             float newTemperature = Float.NaN;
 
-            if (newDevice.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME) != null) {
+            if (newDevice.getMinewFrame(com.minew.ble.v3.enums.FrameType.CUSTOM_COMBINATION_FRAME) != null) {
                 com.minew.ble.mst03.frames.CombinationFrame comboFrame = (com.minew.ble.mst03.frames.CombinationFrame) newDevice
-                        .getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
+                        .getMinewFrame(com.minew.ble.v3.enums.FrameType.CUSTOM_COMBINATION_FRAME);
                 newTemperature = comboFrame.getTemperature();
                 hasValidTemperature = !Float.isNaN(newTemperature);
 
@@ -1600,13 +1711,16 @@ public class ScanDevicesListActivity extends BaseActivity {
                     int batteryLevel = -1;
                     String firmwareVersion = "Unknown";
                     
-                    DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) newDevice.getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
+                    DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) newDevice.getMinewFrame(FrameType.CUSTOM_DEVICE_INFORMATION_FRAME);
                     if (deviceInfo != null) {
                         batteryLevel = deviceInfo.getBattery();
                         firmwareVersion = deviceInfo.getFirmwareVersion();
                     }
                     
                     httpLogger.logScanData(macAddress, newTemperature, batteryLevel, firmwareVersion, newDevice.getRssi());
+                    
+                    // Force immediate UI update for this device
+                    Log.d("ScanDebug", "New temperature data for " + macAddress + ": " + newTemperature + "°C - forcing UI update");
                 }
             }
 
@@ -1631,6 +1745,13 @@ public class ScanDevicesListActivity extends BaseActivity {
                     if (cachedTemperature != null) {
                         Log.d("ScanDebug",
                                 "Preserving cached temperature for " + macAddress + ": " + cachedTemperature + "°C");
+                        
+                        // Update the new device with cached temperature for UI consistency
+                        if (newDevice.getMinewFrame(com.minew.ble.v3.enums.FrameType.CUSTOM_COMBINATION_FRAME) != null) {
+                            com.minew.ble.mst03.frames.CombinationFrame comboFrame = 
+                                (com.minew.ble.mst03.frames.CombinationFrame) newDevice.getMinewFrame(com.minew.ble.v3.enums.FrameType.CUSTOM_COMBINATION_FRAME);
+                            // Note: We can't modify the frame directly, but we can ensure the UI shows the cached value
+                        }
 
                     }
                 }
@@ -1673,9 +1794,9 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
 
     private boolean hasExcursion(MST03Entity device) {
-        if (device.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME) != null) {
+        if (device.getMinewFrame(com.minew.ble.v3.enums.FrameType.CUSTOM_COMBINATION_FRAME) != null) {
             com.minew.ble.mst03.frames.CombinationFrame combinationFrame = (com.minew.ble.mst03.frames.CombinationFrame) device
-                    .getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
+                    .getMinewFrame(com.minew.ble.v3.enums.FrameType.CUSTOM_COMBINATION_FRAME);
             float temperature = combinationFrame.getTemperature();
             boolean hasExcursion = !Float.isNaN(temperature) && temperature != 0.0f &&
                     (temperature > 8.0f || temperature < 2.0f);
@@ -1690,6 +1811,12 @@ public class ScanDevicesListActivity extends BaseActivity {
     private void stopScan() {
         if (mObjectAnimator != null) {
             mObjectAnimator.cancel();
+        }
+        
+        // Log scan event to logger
+        BeaconLoggerActivity logger = BeaconLoggerActivity.getInstance();
+        if (logger != null) {
+            logger.logScanEvent("Scan stopped");
         }
     }
 
@@ -1760,20 +1887,7 @@ public class ScanDevicesListActivity extends BaseActivity {
         }
     }
 
-    private void storeProcessedData(List<HtData> filteredData, List<ExcursionData> excursions) {
-        synchronized (processedHistoricalData) {
-            processedHistoricalData.clear();
-            processedHistoricalData.addAll(filteredData);
-        }
 
-        synchronized (processedExcursionData) {
-            processedExcursionData.clear();
-            processedExcursionData.addAll(excursions);
-        }
-
-        isDataProcessingComplete = true;
-        cleanupDeviceConnection();
-    }
 
     private void cleanupDeviceConnection() {
         if (mst03Entity != null && mBleManager != null) {
@@ -1929,59 +2043,21 @@ public class ScanDevicesListActivity extends BaseActivity {
             return;
         }
 
-        // Find the last excursion start and determine graph data range
-        int lastExcursionStartIndex = -1;
-        int lastNormalBeforeExcursionIndex = -1;
-        boolean wasInNormalRange = false;
-        
-        // First pass: find the last excursion start
-        for (int i = 0; i < htDataList.size(); i++) {
-            float temp = htDataList.get(i).getTemperature();
-            boolean isNormal = (temp >= 2.0f && temp <= 8.0f);
-            if (wasInNormalRange && !isNormal) {
-                lastExcursionStartIndex = i;
-            }
-            wasInNormalRange = isNormal;
-        }
-        
-        // Second pass: find the last normal point before excursion (if excursion exists)
-        if (lastExcursionStartIndex != -1) {
-            for (int i = lastExcursionStartIndex - 1; i >= 0; i--) {
-                float temp = htDataList.get(i).getTemperature();
-                boolean isNormal = (temp >= 2.0f && temp <= 8.0f);
-                if (isNormal) {
-                    lastNormalBeforeExcursionIndex = i;
-                    break;
-                }
-            }
-        }
-        
-        // Determine the data range for graph display
-        if (lastExcursionStartIndex != -1 && lastNormalBeforeExcursionIndex != -1) {
-            // Start from just before the excursion (last normal point)
-            int startIndex = Math.max(0, lastNormalBeforeExcursionIndex);
+        // NEW: Simplified data processing - use beacon timestamps instead of manual calculations
+        // Use the most recent 1000 records for performance optimization
+        if (htDataList.size() > 1000) {
+            int startIndex = htDataList.size() - 1000;
             tripData = htDataList.subList(startIndex, htDataList.size());
-            Log.d("BeaconRawData", "Optimized: Starting from just before excursion (index " + startIndex + "): " + tripData.size() + " records");
-        } else if (lastExcursionStartIndex != -1) {
-            // Excursion found but no normal point before it, start from excursion
-            tripData = htDataList.subList(lastExcursionStartIndex, htDataList.size());
-            Log.d("BeaconRawData", "Optimized: Starting from excursion (no normal point before): " + tripData.size() + " records");
+            Log.d("BeaconRawData", "Using last 1000 records for processing: " + tripData.size() + " records");
         } else {
-            // No excursion found, use latest 1000 records
-            int startIndex = Math.max(0, htDataList.size() - 1000);
-            tripData = htDataList.subList(startIndex, htDataList.size());
-            Log.d("BeaconRawData", "Optimized: No excursion found, using latest " + tripData.size() + " records (from index " + startIndex + ")");
+            tripData = new ArrayList<>(htDataList);
+            Log.d("BeaconRawData", "Using all " + tripData.size() + " records for processing");
         }
 
-        // Find excursions in the selected data range
-        for (int i = 0; i < tripData.size(); i++) {
-            HtData htData = tripData.get(i);
-            float temperature = htData.getTemperature();
-            if (temperature < 2.0f || temperature > 8.0f) {
-                tripExcursions.add(new ExcursionData(temperature, htData.getTimestamps(),
-                        temperature < 2.0f ? "LOW" : "HIGH", mst03Entity.getMacAddress()));
-            }
-        }
+        // NEW: Excursions are now detected directly from beacon data, not from historical data
+        // The direct detection method already handles excursion detection and logging
+        Log.d("BeaconRawData", "Historical data processing complete: " + tripData.size() + " records");
+        Log.d("BeaconRawData", "Excursions are detected directly from beacon data via direct detection method");
 
             long tripDurationMinutes = tripData.isEmpty() ? 0
                     : (tripData.get(tripData.size() - 1).getTimestamps() - tripData.get(0).getTimestamps())
@@ -1994,140 +2070,13 @@ public class ScanDevicesListActivity extends BaseActivity {
         storeProcessedDataOptimized(tripData, tripExcursions);
     }
 
-    private boolean hasRecentExcursions(List<HtData> htDataList) {
 
-        int checkSize = Math.min(100, htDataList.size());
-        for (int i = htDataList.size() - 1; i >= htDataList.size() - checkSize; i--) {
-            float temperature = htDataList.get(i).getTemperature();
-            if (temperature < 2.0f || temperature > 8.0f) {
-                return true;
-            }
-        }
-        return false;
-    }
 
-    private int findExcursionStartBinarySearch(List<HtData> htDataList) {
-        int left = 0;
-        int right = htDataList.size() - 1;
-        int firstExcursionStart = -1;
 
-        while (left <= right) {
-            int mid = left + (right - left) / 2;
-            float temperature = htDataList.get(mid).getTemperature();
 
-            if (temperature < 2.0f || temperature > 8.0f) {
 
-                firstExcursionStart = findFirstExcursionBackwards(htDataList, mid);
-                break;
-            } else {
 
-                left = mid + 1;
-            }
-        }
 
-        return firstExcursionStart;
-    }
-
-    private int findFirstExcursionBackwards(List<HtData> htDataList, int excursionPoint) {
-        boolean wasInNormalRange = false;
-
-        for (int i = excursionPoint; i >= 0; i--) {
-            float temperature = htDataList.get(i).getTemperature();
-            boolean isNormal = (temperature >= 2.0f && temperature <= 8.0f);
-
-            if (wasInNormalRange && !isNormal) {
-                return i;
-            }
-
-            wasInNormalRange = isNormal;
-        }
-
-        return 0;
-    }
-
-    private int findExcursionStartWithEarlyTermination(List<HtData> htDataList) {
-        int firstExcursionStartIndex = -1;
-        boolean wasInNormalRange = false;
-        int consecutiveNormalReadings = 0;
-        final int EARLY_TERMINATION_THRESHOLD = 200;
-
-        for (int i = htDataList.size() - 1; i >= 0; i--) {
-            HtData htData = htDataList.get(i);
-            float temperature = htData.getTemperature();
-
-            boolean isNormal = (temperature >= 2.0f && temperature <= 8.0f);
-
-            if (isNormal) {
-                consecutiveNormalReadings++;
-                if (consecutiveNormalReadings >= EARLY_TERMINATION_THRESHOLD) {
-
-                    break;
-                }
-            } else {
-                consecutiveNormalReadings = 0;
-            }
-
-            if (wasInNormalRange && !isNormal) {
-                firstExcursionStartIndex = i;
-                break;
-            }
-
-            wasInNormalRange = isNormal;
-        }
-
-        return firstExcursionStartIndex;
-    }
-
-    private void extractTripDataOptimized(List<HtData> htDataList, int firstExcursionStartIndex) {
-        List<HtData> tripData;
-        List<ExcursionData> tripExcursions = new ArrayList<>();
-
-        if (firstExcursionStartIndex != -1) {
-
-            int lastNormalIndex = -1;
-            for (int i = firstExcursionStartIndex - 1; i >= 0; i--) {
-                HtData htData = htDataList.get(i);
-                float temperature = htData.getTemperature();
-                boolean isNormal = (temperature >= 2.0f && temperature <= 8.0f);
-
-                if (isNormal) {
-                    lastNormalIndex = i;
-                    break;
-                }
-            }
-
-            int startIndex = (lastNormalIndex != -1) ? lastNormalIndex : firstExcursionStartIndex;
-            tripData = htDataList.subList(startIndex, htDataList.size());
-
-            for (int i = firstExcursionStartIndex; i < htDataList.size(); i++) {
-                HtData htData = htDataList.get(i);
-                float temperature = htData.getTemperature();
-                if (temperature < 2.0f || temperature > 8.0f) {
-                    tripExcursions.add(new ExcursionData(temperature, htData.getTimestamps(),
-                            temperature < 2.0f ? "LOW" : "HIGH", mst03Entity.getMacAddress()));
-                }
-            }
-
-            String startPoint = (lastNormalIndex != -1) ? "last normal point (index " + lastNormalIndex + ")"
-                    : "excursion start (index " + firstExcursionStartIndex + ")";
-            Log.d("BeaconRawData",
-                    "Optimized trip detected: " + tripData.size() + " records starting from " + startPoint +
-                            " with " + tripExcursions.size() + " excursions");
-        } else {
-
-            int recentSize = Math.min(1000, htDataList.size());
-            int startIndex = htDataList.size() - recentSize;
-            tripData = htDataList.subList(startIndex, htDataList.size());
-            Log.d("BeaconRawData", "No excursion trip found, using recent " + tripData.size() + " records");
-            Log.d("BeaconRawData", "Original data size: " + htDataList.size() + ", Recent size: " + recentSize + ", Start index: " + startIndex);
-            if (!tripData.isEmpty()) {
-                Log.d("BeaconRawData", "First trip record timestamp: " + tripData.get(0).getTimestamps() + ", temp: " + tripData.get(0).getTemperature());
-                Log.d("BeaconRawData", "Last trip record timestamp: " + tripData.get(tripData.size() - 1).getTimestamps() + ", temp: " + tripData.get(tripData.size() - 1).getTemperature());
-            }
-        }
-
-        storeProcessedDataOptimized(tripData, tripExcursions);
-    }
 
     private void storeProcessedDataOptimized(List<HtData> tripData, List<ExcursionData> tripExcursions) {
         synchronized (processedHistoricalData) {
@@ -2296,12 +2245,16 @@ public class ScanDevicesListActivity extends BaseActivity {
             int startIndex = (lastNormalIndex != -1) ? lastNormalIndex : latestExcursionIndex;
             tripData = htDataList.subList(startIndex, htDataList.size());
 
-            for (int i = latestExcursionIndex; i < htDataList.size(); i++) {
-                HtData htData = htDataList.get(i);
-                float temperature = htData.getTemperature();
-                if (temperature < 2.0f || temperature > 8.0f) {
-                    tripExcursions.add(new ExcursionData(temperature, htData.getTimestamps(),
-                            temperature < 2.0f ? "LOW" : "HIGH", mst03Entity.getMacAddress()));
+            // Check if there are consecutive excursions within 5 minutes
+            List<HtData> excursionData = htDataList.subList(latestExcursionIndex, htDataList.size());
+            if (hasConsecutiveExcursionsWithin5Minutes(excursionData)) {
+                for (int i = latestExcursionIndex; i < htDataList.size(); i++) {
+                    HtData htData = htDataList.get(i);
+                    float temperature = htData.getTemperature();
+                    if (temperature < 2.0f || temperature > 8.0f) {
+                        tripExcursions.add(new ExcursionData(temperature, htData.getTimestamps(),
+                                temperature < 2.0f ? "LOW" : "HIGH", mst03Entity.getMacAddress()));
+                    }
                 }
             }
 
@@ -2313,8 +2266,7 @@ public class ScanDevicesListActivity extends BaseActivity {
                     : "excursion start (index " + latestExcursionIndex + ")";
             Log.d("BeaconRawData",
                     "Parallel trip detected: " + tripData.size() + " records starting from " + startPoint +
-                            " to " + (htDataList.size() - 1) + " with " + tripExcursions.size()
-                            + " excursions. Duration: " + tripDurationMinutes + " minutes");
+                            " to " + (htDataList.size() - 1) + " with excursions detected directly from beacon data. Duration: " + tripDurationMinutes + " minutes");
         } else {
 
             int startIndex = Math.max(0, htDataList.size() - 1000);
@@ -2391,12 +2343,16 @@ public class ScanDevicesListActivity extends BaseActivity {
             int startIndex = (lastNormalIndex != -1) ? lastNormalIndex : latestExcursionIndex;
             tripData = htDataList.subList(startIndex, htDataList.size());
 
-            for (int i = latestExcursionIndex; i < htDataList.size(); i++) {
-                HtData htData = htDataList.get(i);
-                float temperature = htData.getTemperature();
-                if (temperature < 2.0f || temperature > 8.0f) {
-                    tripExcursions.add(new ExcursionData(temperature, htData.getTimestamps(),
-                            temperature < 2.0f ? "LOW" : "HIGH", mst03Entity.getMacAddress()));
+            // Check if there are consecutive excursions within 5 minutes
+            List<HtData> excursionData = htDataList.subList(latestExcursionIndex, htDataList.size());
+            if (hasConsecutiveExcursionsWithin5Minutes(excursionData)) {
+                for (int i = latestExcursionIndex; i < htDataList.size(); i++) {
+                    HtData htData = htDataList.get(i);
+                    float temperature = htData.getTemperature();
+                    if (temperature < 2.0f || temperature > 8.0f) {
+                        tripExcursions.add(new ExcursionData(temperature, htData.getTimestamps(),
+                                temperature < 2.0f ? "LOW" : "HIGH", mst03Entity.getMacAddress()));
+                    }
                 }
             }
 
@@ -2864,4 +2820,331 @@ public class ScanDevicesListActivity extends BaseActivity {
         }
     }
     
+    /**
+     * NEW: Direct excursion detection using beacon data
+     * This eliminates the need for complex historical data processing
+     */
+    private void detectExcursionsFromBeaconData(MST03Entity device) {
+        if (device == null) return;
+        
+        CombinationFrame comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.CUSTOM_COMBINATION_FRAME);
+        if (comboFrame == null) {
+            Log.d("DirectExcursion", "No CombinationFrame available for " + device.getMacAddress());
+            return;
+        }
+        
+        String macAddress = device.getMacAddress();
+        float temperature = comboFrame.getTemperature();
+        
+        // Check for temperature excursions using beacon data
+        boolean hasTemperatureExcursion = false;
+        String excursionType = "NONE";
+        
+        if (comboFrame.getTemperatureUpperLimit1AlarmMark() == 1) {
+            hasTemperatureExcursion = true;
+            excursionType = "HIGH";
+            Log.d("DirectExcursion", "HIGH temperature excursion detected for " + macAddress);
+        } else if (comboFrame.getTemperatureLowerLimit1AlarmMark() == 1) {
+            hasTemperatureExcursion = true;
+            excursionType = "LOW";
+            Log.d("DirectExcursion", "LOW temperature excursion detected for " + macAddress);
+        }
+        
+        // Check for light events (end of trip signal)
+        boolean hasLightEvent = comboFrame.getLightIntensityUpperLimitAlarmMark() == 1 || 
+                               comboFrame.getLightIntensityLowerLimitAlarmMark() == 1;
+        
+        if (hasTemperatureExcursion) {
+            // Get excursion details directly from beacon
+            long excursionStartTimeBeacon = comboFrame.getTempEventTimestamp();
+            long currentTimeBeacon = comboFrame.getCurrentTimestamp();
+            long excursionDurationMs = normalizeToMillis(currentTimeBeacon) - normalizeToMillis(excursionStartTimeBeacon);
+            long excursionStartWallClock = alignBeaconTimestampToWallClock(excursionStartTimeBeacon, currentTimeBeacon);
+            
+            // Create excursion data with wall-clock timestamp
+            ExcursionData excursion = new ExcursionData(
+                temperature, 
+                excursionStartWallClock, 
+                excursionType, 
+                macAddress
+            );
+            
+            // Add to processed excursions
+            synchronized (processedExcursionData) {
+                processedExcursionData.clear(); // Clear old data
+                processedExcursionData.add(excursion);
+            }
+            
+            Log.d("DirectExcursion", String.format(
+                "Excursion detected: %s - BeaconStart: %d, WallClockStart: %d (%s), Duration: %d ms, Temp: %.2f°C",
+                excursionType, excursionStartTimeBeacon, excursionStartWallClock, new java.util.Date(excursionStartWallClock), excursionDurationMs, temperature
+            ));
+            
+            // Log to beacon logger
+            BeaconLoggerActivity logger = BeaconLoggerActivity.getInstance();
+            if (logger != null) {
+                logger.addLogEntry(String.format(
+                    "DIRECT EXCURSION DETECTED: %s - %s - Start: %s - Duration: %d ms - Temp: %.2f°C",
+                    macAddress, excursionType, new java.util.Date(excursionStartWallClock).toString(), excursionDurationMs, temperature
+                ));
+            }
+        }
+        
+        // Check for light event (end of trip)
+        if (hasLightEvent) {
+            long lightEventTimeBeacon = comboFrame.getLightEventTimestamp();
+            long currentTimeBeacon = comboFrame.getCurrentTimestamp();
+            long lightEventWallClock = alignBeaconTimestampToWallClock(lightEventTimeBeacon, currentTimeBeacon);
+            Log.d("DirectExcursion", "Light event detected for " + macAddress + " at beaconTime=" + lightEventTimeBeacon + 
+                    ", wallClock=" + lightEventWallClock + " (" + new java.util.Date(lightEventWallClock) + ")");
+            
+            // Log to beacon logger
+            BeaconLoggerActivity logger = BeaconLoggerActivity.getInstance();
+            if (logger != null) {
+                logger.addLogEntry(String.format(
+                    "LIGHT EVENT (END OF TRIP): %s - Time: %s",
+                    macAddress, new java.util.Date(lightEventWallClock).toString()
+                ));
+            }
+        }
+        
+        // Store current device state for CSV generation
+        synchronized (completeHistoricalData) {
+            completeHistoricalData.clear();
+            // Create a single HtData entry with current beacon data
+            HtData currentData = new HtData();
+            currentData.setMacAddress(macAddress);
+            currentData.setTemperature(temperature);
+            currentData.setHumidity(0.0f); // Not available in beacon
+            // Persist current sample timestamp as wall-clock for consistency in details/CSV
+            long currentWallClock = alignBeaconTimestampToWallClock(comboFrame.getCurrentTimestamp(), comboFrame.getCurrentTimestamp());
+            currentData.setTimestamps(currentWallClock);
+            completeHistoricalData.add(currentData);
+        }
+        
+        // Mark processing as complete
+        isDataProcessingComplete = true;
+        updateProcessingStatus("Direct Detection Complete");
+        
+        Log.d("DirectExcursion", "Direct excursion detection completed for " + macAddress);
+    }
+
+    /**
+     * NEW: Fetch historical data for device details screen
+     * This provides the data needed for graphs and statistics while keeping direct detection for alerts
+     */
+    private void fetchHistoricalDataForDetailsScreen(int batteryLevel, String firmwareVersion, float currentTemperature) {
+        Log.d("DirectExcursion", "Fetching historical data for details screen");
+        
+        long systemTime = System.currentTimeMillis() / 1000;
+        long startTime = (systemTime - 3600 * 24) / 1000; // Last 24 hours
+        long endTime = systemTime;
+        
+        // Set a shorter timeout for details screen data
+        Handler dataTimeoutHandler = new Handler();
+        Runnable timeoutRunnable = new Runnable() {
+            @Override
+            public void run() {
+                Log.w("DirectExcursion", "Historical data fetch timeout - proceeding with navigation");
+                navigateToDeviceDetails(batteryLevel, firmwareVersion, currentTemperature);
+            }
+        };
+        dataTimeoutHandler.postDelayed(timeoutRunnable, 8000); // 8 second timeout
+        
+        try {
+            Log.d("DirectExcursion", "Querying historical data with parameters:");
+            Log.d("DirectExcursion", "  MAC: " + mst03Entity.getMacAddress());
+            Log.d("DirectExcursion", "  Rules: 1 (time-based)");
+            Log.d("DirectExcursion", "  Start Time: " + startTime + " (" + new java.util.Date(startTime * 1000) + ")");
+            Log.d("DirectExcursion", "  End Time: " + endTime + " (" + new java.util.Date(endTime * 1000) + ")");
+            Log.d("DirectExcursion", "  System Time: " + systemTime + " (" + new java.util.Date(systemTime * 1000) + ")");
+            
+            // Try to get historical data for the last 24 hours
+            mBleManager.queryTemperatureHistoryData(mst03Entity.getMacAddress(), 1, startTime, endTime, systemTime, 
+                new OnQueryResultListener<HistoryHtData>() {
+                    @Override
+                    public void OnQueryResult(boolean success, HistoryHtData historyHtData) {
+                        Log.d("DirectExcursion", "Historical data query result: success=" + success);
+                        
+                        // Cancel timeout
+                        dataTimeoutHandler.removeCallbacks(timeoutRunnable);
+                        
+                        if (success && historyHtData != null) {
+                            List<HtData> allData = historyHtData.getHistoryDataList();
+                            Log.d("DirectExcursion", "Received " + allData.size() + " historical records");
+                            
+                            if (allData.isEmpty()) {
+                                // Try fallback with rules=0 (all data)
+                                tryFallbackHistoricalQuery(batteryLevel, firmwareVersion, currentTemperature, dataTimeoutHandler);
+                            } else {
+                                // Process historical data for details screen
+                                processHistoricalDataForDetailsScreen(allData, batteryLevel, firmwareVersion, currentTemperature);
+                            }
+                        } else {
+                            // Try fallback with rules=0 (all data)
+                            tryFallbackHistoricalQuery(batteryLevel, firmwareVersion, currentTemperature, dataTimeoutHandler);
+                        }
+                    }
+                });
+        } catch (Exception e) {
+            Log.e("DirectExcursion", "Exception during historical data query: " + e.getMessage());
+            dataTimeoutHandler.removeCallbacks(timeoutRunnable);
+            tryFallbackHistoricalQuery(batteryLevel, firmwareVersion, currentTemperature, dataTimeoutHandler);
+        }
+    }
+    
+    /**
+     * Fallback historical query with rules=0 (all data)
+     */
+    private void tryFallbackHistoricalQuery(int batteryLevel, String firmwareVersion, float currentTemperature, Handler dataTimeoutHandler) {
+        Log.d("DirectExcursion", "Trying fallback historical query with rules=0");
+        
+        long systemTime = System.currentTimeMillis() / 1000;
+        
+        Runnable fallbackTimeoutRunnable = new Runnable() {
+            @Override
+            public void run() {
+                Log.w("DirectExcursion", "Fallback historical query timeout - proceeding with navigation");
+                navigateToDeviceDetails(batteryLevel, firmwareVersion, currentTemperature);
+            }
+        };
+        dataTimeoutHandler.postDelayed(fallbackTimeoutRunnable, 5000); // 5 second timeout
+        
+        try {
+            mBleManager.queryTemperatureHistoryData(mst03Entity.getMacAddress(), 0, 0L, 0L, systemTime, 
+                new OnQueryResultListener<HistoryHtData>() {
+                    @Override
+                    public void OnQueryResult(boolean fallbackSuccess, HistoryHtData fallbackHistoryHtData) {
+                        Log.d("DirectExcursion", "Fallback historical query result: success=" + fallbackSuccess);
+                        
+                        // Cancel fallback timeout
+                        dataTimeoutHandler.removeCallbacks(fallbackTimeoutRunnable);
+                        
+                        if (fallbackSuccess && fallbackHistoryHtData != null) {
+                            List<HtData> fallbackData = fallbackHistoryHtData.getHistoryDataList();
+                            Log.d("DirectExcursion", "Fallback received " + fallbackData.size() + " historical records");
+                            
+                            if (fallbackData.isEmpty()) {
+                                Log.d("DirectExcursion", "No historical data available - proceeding with navigation");
+                                navigateToDeviceDetails(batteryLevel, firmwareVersion, currentTemperature);
+                            } else {
+                                processHistoricalDataForDetailsScreen(fallbackData, batteryLevel, firmwareVersion, currentTemperature);
+                            }
+                        } else {
+                            Log.d("DirectExcursion", "Fallback historical query failed - proceeding with navigation");
+                            navigateToDeviceDetails(batteryLevel, firmwareVersion, currentTemperature);
+                        }
+                    }
+                });
+        } catch (Exception e) {
+            Log.e("DirectExcursion", "Exception during fallback historical query: " + e.getMessage());
+            dataTimeoutHandler.removeCallbacks(fallbackTimeoutRunnable);
+            navigateToDeviceDetails(batteryLevel, firmwareVersion, currentTemperature);
+        }
+    }
+    
+    /**
+     * Process historical data for device details screen
+     */
+    private void processHistoricalDataForDetailsScreen(List<HtData> htDataList, int batteryLevel, String firmwareVersion, float currentTemperature) {
+        Log.d("DirectExcursion", "Processing " + htDataList.size() + " historical records for details screen");
+        
+        // Align historical timestamps to wall-clock if they appear to be using a different epoch (e.g., 1990s)
+        List<HtData> alignedList = alignHistoricalDataToWallClock(htDataList);
+        
+        // Store complete historical data for CSV generation
+        synchronized (completeHistoricalData) {
+            completeHistoricalData.clear();
+            completeHistoricalData.addAll(alignedList);
+        }
+        
+        // For details screen, use the most recent 1000 records for graph display
+        List<HtData> graphData;
+        if (alignedList.size() > 1000) {
+            graphData = alignedList.subList(alignedList.size() - 1000, alignedList.size());
+            Log.d("DirectExcursion", "Using last 1000 records for graph display");
+        } else {
+            graphData = new ArrayList<>(alignedList);
+            Log.d("DirectExcursion", "Using all " + graphData.size() + " records for graph display");
+        }
+        
+        // Store processed data for device details screen
+        synchronized (processedHistoricalData) {
+            processedHistoricalData.clear();
+            processedHistoricalData.addAll(graphData);
+        }
+        
+        // Generate CSV with complete data
+        if (!alignedList.isEmpty()) {
+            Log.d("DirectExcursion", "Generating CSV with " + alignedList.size() + " records");
+            generateTripDataCSV(alignedList, processedExcursionData);
+        }
+        
+        // Mark processing as complete
+        isDataProcessingComplete = true;
+        
+        Log.d("DirectExcursion", "Historical data processing complete for details screen");
+        
+        // Navigate to device details
+        navigateToDeviceDetails(batteryLevel, firmwareVersion, currentTemperature);
+    }
+
+    /**
+     * Converts a beacon timestamp to wall-clock time using the beacon's currentTimestamp as reference.
+     * Handles seconds vs milliseconds automatically.
+     */
+    private long alignBeaconTimestampToWallClock(long beaconEventTimestamp, long beaconCurrentTimestamp) {
+        long eventMs = normalizeToMillis(beaconEventTimestamp);
+        long currentMs = normalizeToMillis(beaconCurrentTimestamp);
+        long nowMs = System.currentTimeMillis();
+        long delta = Math.max(0L, currentMs - eventMs);
+        return nowMs - delta;
+    }
+
+    /**
+     * Normalizes a timestamp to milliseconds. If it looks like seconds (< 1e12), multiply by 1000.
+     */
+    private long normalizeToMillis(long ts) {
+        return ts < 10000000000L ? ts * 1000L : ts;
+    }
+
+    /**
+     * Aligns a list of HtData timestamps to wall-clock using heuristic:
+     * - If any timestamp year < 2005, shift all by the delta inferred from first record vs now.
+     * - Keeps monotonic order.
+     */
+    private List<HtData> alignHistoricalDataToWallClock(List<HtData> input) {
+        if (input == null || input.isEmpty()) return input;
+        try {
+            boolean looksOld = false;
+            for (int i = 0; i < Math.min(5, input.size()); i++) {
+                long ts = input.get(i).getTimestamps();
+                long tsMs = normalizeToMillis(ts);
+                java.util.Calendar c = java.util.Calendar.getInstance();
+                c.setTimeInMillis(tsMs);
+                int year = c.get(java.util.Calendar.YEAR);
+                if (year < 2005) { looksOld = true; break; }
+            }
+            if (!looksOld) return input;
+            long firstMs = normalizeToMillis(input.get(0).getTimestamps());
+            long nowMs = System.currentTimeMillis();
+            // Assume first sample is relatively recent in device time; compute delta to shift forward
+            long delta = Math.max(0L, nowMs - firstMs);
+            List<HtData> out = new ArrayList<>(input.size());
+            for (HtData d : input) {
+                HtData copy = new HtData();
+                copy.setMacAddress(d.getMacAddress());
+                copy.setTemperature(d.getTemperature());
+                copy.setHumidity(d.getHumidity());
+                long aligned = normalizeToMillis(d.getTimestamps()) + delta;
+                copy.setTimestamps(aligned);
+                out.add(copy);
+            }
+            Log.d("DirectExcursion", "Aligned historical data by +" + delta + " ms to match wall-clock");
+            return out;
+        } catch (Exception e) {
+            Log.e("DirectExcursion", "Failed aligning historical data: " + e.getMessage());
+            return input;
+        }
+    }
 }

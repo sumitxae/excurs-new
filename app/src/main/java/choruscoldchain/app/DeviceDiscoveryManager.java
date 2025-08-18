@@ -48,7 +48,7 @@ public class DeviceDiscoveryManager {
         for (MST03Entity newDevice : newDevices) {
 
             com.minew.ble.mst03.frames.CombinationFrame comboFrame = (com.minew.ble.mst03.frames.CombinationFrame) newDevice
-                    .getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
+                    .getMinewFrame(com.minew.ble.v3.enums.FrameType.CUSTOM_COMBINATION_FRAME);
             if (comboFrame != null) {
                 Log.d(TAG, "[FrameLog] CombinationFrame available for " + newDevice.getMacAddress() +
                         " - Temp: " + comboFrame.getTemperature() + "°C");

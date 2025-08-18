@@ -360,6 +360,21 @@
         android:layout_marginBottom="16dp"
         android:background="@mipmap/new_refresh_home" />
 
+    <!-- Floating Logger Button -->
+    <ImageButton
+        android:id="@+id/btn_beacon_logger"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/ib_home_scan"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/bg_logger_button"
+        android:src="@drawable/ic_logger"
+        android:contentDescription="Beacon Logger"
+        android:scaleType="center"
+        android:padding="12dp" />
+
     <!-- Elevated App ID Footer for Scan Screen -->
     <include
         android:id="@+id/scan_app_id_footer"

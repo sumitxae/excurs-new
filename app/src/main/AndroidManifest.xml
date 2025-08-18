@@ -98,6 +98,9 @@
         <activity android:name=".QRScannerActivity"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
+        <activity android:name=".BeaconLoggerActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
         
         <activity android:name=".InstallationInfoActivity"
             android:screenOrientation="portrait"

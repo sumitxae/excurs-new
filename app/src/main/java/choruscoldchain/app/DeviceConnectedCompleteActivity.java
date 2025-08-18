@@ -129,6 +129,15 @@ public class DeviceConnectedCompleteActivity extends BaseActivity{
     }
     private void initBleManager(){
         mBleManager = MST03SensorBleManager.getInstance();
+        
+        // Set manufacturer ID for MST03 devices (0x00E0 = Google)
+        mBleManager.setManufacturerIdHexLe("E000");
+        Log.d(TAG, "Set manufacturer ID to E000 for MST03 devices");
+        
+        // Set custom scan duration for better performance
+        mBleManager.setDefaultScanTime(60 * 1000); // 1 minute scan duration
+        Log.d(TAG, "Set custom scan duration");
+        
         mBleManager.setOnConnStateListener(new OnConnStateListener() {
             @Override
             public void onUpdateConnState(String s, BleConnectionState sensorConnectionState) {
@@ -350,7 +359,7 @@ public class DeviceConnectedCompleteActivity extends BaseActivity{
                         WaitDialog.show(R.string.loading);
                     }
                 });
-                mBleManager.queryHistoryData(mMac,rule, startTime, endTime, systemTime, new OnQueryResultListener<HistoryHtData>() {
+                mBleManager.queryTemperatureHistoryData(mMac,rule, startTime, endTime, systemTime, new OnQueryResultListener<HistoryHtData>() {
 
                     @Override
                     public void OnQueryResult(boolean b, HistoryHtData historyHtData) {
@@ -398,7 +407,7 @@ public class DeviceConnectedCompleteActivity extends BaseActivity{
 
     }
     private void clearHistoryData(){
-        mBleManager.cleanHistoryData(mMac, new OnModifyConfigurationListener() {
+        mBleManager.cleanTempHistoryData(mMac, new OnModifyConfigurationListener() {
             @Override
             public void onModifyResult(boolean b) {
                 Toast.makeText(DeviceConnectedCompleteActivity.this,"clear Result:"+b,Toast.LENGTH_LONG).show();

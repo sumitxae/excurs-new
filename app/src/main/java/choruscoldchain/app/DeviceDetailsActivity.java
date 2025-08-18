@@ -172,7 +172,7 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         } else {
             try {
                 DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) device
-                        .getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
+                        .getMinewFrame(FrameType.CUSTOM_DEVICE_INFORMATION_FRAME);
                 if (deviceInfo != null) {
                     batteryLevel = deviceInfo.getBattery();
                     tvBatteryLevel.setText(batteryLevel + "%");
@@ -198,7 +198,7 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         } else {
             try {
                 DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) device
-                        .getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
+                        .getMinewFrame(FrameType.CUSTOM_DEVICE_INFORMATION_FRAME);
                 if (deviceInfo != null) {
                     firmwareVersion = deviceInfo.getFirmwareVersion();
                     tvFirmwareVersion.setText(firmwareVersion);
@@ -216,7 +216,7 @@ public class DeviceDetailsActivity extends AppCompatActivity {
 
     private void loadCurrentTemperatureFromBeacon(float fallbackTemperature) {
         try {
-            CombinationFrame comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.COMBINATION_FRAME);
+            CombinationFrame comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.CUSTOM_COMBINATION_FRAME);
             if (comboFrame != null) {
                 float temperature = comboFrame.getTemperature();
                 if (!Float.isNaN(temperature) && temperature != 0.0f) {
@@ -266,7 +266,7 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         }
         try {
             DeviceStaticInfoFrame deviceInfo = (DeviceStaticInfoFrame) device
-                    .getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
+                    .getMinewFrame(FrameType.CUSTOM_DEVICE_INFORMATION_FRAME);
             if (deviceInfo != null) {
                 deviceStaticInfo = deviceInfo;
                 int batteryLevel = deviceStaticInfo.getBattery();
@@ -441,14 +441,9 @@ public class DeviceDetailsActivity extends AppCompatActivity {
                     firstExcursionTimestamp = historicalData.get(0).getTimestamps();
                 }
             } else if (excursionData != null && !excursionData.isEmpty()) {
-                for (HtData htData : historicalData) {
-                    float temperature = htData.getTemperature();
-                    if (temperature < 2.0f || temperature > 8.0f) {
-                        firstExcursionTimestamp = htData.getTimestamps();
-                        break;
-                    }
-                }
-                if (firstExcursionTimestamp == -1 && !excursionData.isEmpty()) {
+                // The excursion data has already been filtered by the consecutive logic in ScanDevicesListActivity
+                // So we can trust that these are valid excursions
+                if (!excursionData.isEmpty()) {
                     firstExcursionTimestamp = excursionData.get(0).getTimestamp();
                 }
             }

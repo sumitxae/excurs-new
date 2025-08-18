@@ -309,6 +309,15 @@ public class BackgroundScanService extends Service {
                 Log.e(TAG, "Failed to get BLE manager instance");
                 return;
             }
+            
+            // Set manufacturer ID for MST03 devices (0x00E0 = Google)
+            mBleManager.setManufacturerIdHexLe("E000");
+            Log.d(TAG, "Set manufacturer ID to E000 for MST03 devices");
+            
+            // Set custom scan duration for better performance
+            mBleManager.setDefaultScanTime(60 * 1000); // 1 minute scan duration
+            Log.d(TAG, "Set custom scan duration");
+            
             Log.d(TAG, "BLE manager initialized successfully for background scanning");
         } catch (Exception e) {
             Log.e(TAG, "Error initializing BLE manager: " + e.getMessage());
@@ -406,7 +415,7 @@ public class BackgroundScanService extends Service {
             
             // Check if device has temperature data
             com.minew.ble.mst03.frames.CombinationFrame comboFrame = 
-                (com.minew.ble.mst03.frames.CombinationFrame) device.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
+                (com.minew.ble.mst03.frames.CombinationFrame) device.getMinewFrame(com.minew.ble.v3.enums.FrameType.CUSTOM_COMBINATION_FRAME);
             
             if (comboFrame != null) {
                 float temperature = comboFrame.getTemperature();
@@ -442,9 +451,9 @@ public class BackgroundScanService extends Service {
         boolean hasValidTemperature = false;
         
         // Get temperature from CombinationFrame
-        if (device.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME) != null) {
+        if (device.getMinewFrame(com.minew.ble.v3.enums.FrameType.CUSTOM_COMBINATION_FRAME) != null) {
             com.minew.ble.mst03.frames.CombinationFrame comboFrame = 
-                (com.minew.ble.mst03.frames.CombinationFrame) device.getMinewFrame(com.minew.ble.v3.enums.FrameType.COMBINATION_FRAME);
+                (com.minew.ble.mst03.frames.CombinationFrame) device.getMinewFrame(com.minew.ble.v3.enums.FrameType.CUSTOM_COMBINATION_FRAME);
             temperature = comboFrame.getTemperature();
             
             // Enhanced validation: Check for reasonable temperature range
@@ -457,9 +466,9 @@ public class BackgroundScanService extends Service {
         }
         
         // Get device info
-        if (device.getMinewFrame(com.minew.ble.v3.enums.FrameType.DEVICE_INFORMATION_FRAME) != null) {
+        if (device.getMinewFrame(com.minew.ble.v3.enums.FrameType.CUSTOM_DEVICE_INFORMATION_FRAME) != null) {
             com.minew.ble.mst03.frames.DeviceStaticInfoFrame staticFrame = 
-                (com.minew.ble.mst03.frames.DeviceStaticInfoFrame) device.getMinewFrame(com.minew.ble.v3.enums.FrameType.DEVICE_INFORMATION_FRAME);
+                (com.minew.ble.mst03.frames.DeviceStaticInfoFrame) device.getMinewFrame(com.minew.ble.v3.enums.FrameType.CUSTOM_DEVICE_INFORMATION_FRAME);
             battery = staticFrame.getBattery();
             firmwareVersion = staticFrame.getFirmwareVersion();
         }

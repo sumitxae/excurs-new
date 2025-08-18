@@ -34,7 +34,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="@dimen/spacing_lg"
-        android:text="Please turn on your Bluetooth to continue using the app."
+        android:text="Please turn on your Bluetooth to continue scanning."
         android:textSize="16sp"
         android:textColor="@color/text_secondary"
         android:gravity="center"

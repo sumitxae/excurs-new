@@ -52,8 +52,8 @@ public class ScanDevicesListAdapter extends BaseQuickAdapter<MST03Entity, BaseVi
         DeviceStaticInfoFrame deviceStaticInfoFrame =null;
         CombinationFrame combinationFrame = null;
         StringFrame stringFrame = null;
-        if(mst03Entity.getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME)!=null){
-            deviceStaticInfoFrame = (DeviceStaticInfoFrame) mst03Entity.getMinewFrame(FrameType.DEVICE_INFORMATION_FRAME);
+        if(mst03Entity.getMinewFrame(FrameType.CUSTOM_DEVICE_INFORMATION_FRAME)!=null){
+            deviceStaticInfoFrame = (DeviceStaticInfoFrame) mst03Entity.getMinewFrame(FrameType.CUSTOM_DEVICE_INFORMATION_FRAME);
             
             
             Log.d("Scan", "=== Device Static Info for " + mst03Entity.getMacAddress() + " ===");
@@ -68,13 +68,26 @@ public class ScanDevicesListAdapter extends BaseQuickAdapter<MST03Entity, BaseVi
             Log.d("Scan", "No DeviceStaticInfoFrame available for " + mst03Entity.getMacAddress());
         }
 
-        if(mst03Entity.getMinewFrame(FrameType.COMBINATION_FRAME)!=null){
-            combinationFrame = (CombinationFrame) mst03Entity.getMinewFrame(FrameType.COMBINATION_FRAME);
+        if(mst03Entity.getMinewFrame(FrameType.CUSTOM_COMBINATION_FRAME)!=null){
+            combinationFrame = (CombinationFrame) mst03Entity.getMinewFrame(FrameType.CUSTOM_COMBINATION_FRAME);
             Log.d("Scan", "=== Combination Frame for " + mst03Entity.getMacAddress() + " ===");
             Log.d("Scan", "Temperature: " + combinationFrame.getTemperature() + "°C");
+            Log.d("Scan", "Battery: " + combinationFrame.getBattery() + "%");
+            Log.d("Scan", "Current Timestamp: " + combinationFrame.getCurrentTimestamp());
+            Log.d("Scan", "Temp Event Timestamp: " + combinationFrame.getTempEventTimestamp());
+            Log.d("Scan", "Frame Version: " + combinationFrame.getFrameVersion());
+            Log.d("Scan", "Company ID: " + combinationFrame.getCompanyId());
+            Log.d("Scan", "Google ID: " + combinationFrame.getGoogleId());
             Log.d("Scan", "==========================================");
         } else {
             Log.d("Scan", "No CombinationFrame available for " + mst03Entity.getMacAddress());
+            // Try to log what frames are available
+            Log.d("Scan", "Available frames for " + mst03Entity.getMacAddress() + ":");
+            for (com.minew.ble.v3.enums.FrameType frameType : com.minew.ble.v3.enums.FrameType.values()) {
+                if (mst03Entity.getMinewFrame(frameType) != null) {
+                    Log.d("Scan", "  - " + frameType.name() + ": " + mst03Entity.getMinewFrame(frameType).toString());
+                }
+            }
         }
         if(mst03Entity.getMinewFrame(FrameType.STRING_FRAME)!=null){
             stringFrame = (StringFrame) mst03Entity.getMinewFrame(FrameType.STRING_FRAME);
