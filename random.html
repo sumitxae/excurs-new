@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MinewSensorKit Migration Guide</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background: #fff;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .header {
+        text-align: center;
+        border-bottom: 3px solid #2563eb;
+        padding-bottom: 30px;
+        margin-bottom: 40px;
+      }
+
+      .header h1 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #1e40af;
+        margin-bottom: 10px;
+      }
+
+      .header .subtitle {
+        font-size: 1.2rem;
+        color: #64748b;
+        font-weight: 400;
+      }
+
+      .document-info {
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 40px;
+        border-left: 4px solid #2563eb;
+      }
+
+      .document-info h3 {
+        color: #1e40af;
+        margin-bottom: 15px;
+        font-size: 1.3rem;
+      }
+
+      .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 15px;
+      }
+
+      .info-item {
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .info-item strong {
+        color: #374151;
+        display: block;
+        margin-bottom: 5px;
+      }
+
+      h2 {
+        font-size: 1.8rem;
+        color: #1e40af;
+        margin: 40px 0 20px 0;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #e5e7eb;
+        font-weight: 600;
+      }
+
+      h3 {
+        font-size: 1.4rem;
+        color: #374151;
+        margin: 30px 0 15px 0;
+        font-weight: 600;
+      }
+
+      h4 {
+        font-size: 1.2rem;
+        color: #4b5563;
+        margin: 20px 0 10px 0;
+        font-weight: 600;
+      }
+
+      p {
+        margin-bottom: 15px;
+        text-align: justify;
+      }
+
+      .section {
+        margin-bottom: 50px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+        background: white;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      th {
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        color: white;
+        padding: 15px 12px;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+
+      td {
+        padding: 12px;
+        border-bottom: 1px solid #e5e7eb;
+        vertical-align: top;
+      }
+
+      tr:nth-child(even) {
+        background: #f8fafc;
+      }
+
+      tr:hover {
+        background: #f1f5f9;
+      }
+
+      .code-block {
+        background: #1e293b;
+        color: #e2e8f0;
+        padding: 20px;
+        border-radius: 8px;
+        margin: 15px 0;
+        overflow-x: auto;
+        font-family: "Courier New", monospace;
+        font-size: 0.9rem;
+        line-height: 1.5;
+      }
+
+      .highlight {
+        background: #fef3c7;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 500;
+      }
+
+      .warning {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-left: 4px solid #ef4444;
+        padding: 15px;
+        border-radius: 5px;
+        margin: 20px 0;
+      }
+
+      .warning h4 {
+        color: #dc2626;
+        margin: 0 0 10px 0;
+        display: flex;
+        align-items: center;
+      }
+
+      .warning h4:before {
+        content: "⚠️";
+        margin-right: 8px;
+      }
+
+      .info-box {
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        border-left: 4px solid #2563eb;
+        padding: 15px;
+        border-radius: 5px;
+        margin: 20px 0;
+      }
+
+      .info-box h4 {
+        color: #1d4ed8;
+        margin: 0 0 10px 0;
+        display: flex;
+        align-items: center;
+      }
+
+      .info-box h4:before {
+        content: "ℹ️";
+        margin-right: 8px;
+      }
+
+      .changes-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+        margin: 30px 0;
+      }
+
+      .changes-column {
+        background: white;
+        padding: 25px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      .changes-column h4 {
+        color: #1e40af;
+        margin-bottom: 20px;
+        font-size: 1.3rem;
+      }
+
+      .changes-list {
+        list-style: none;
+        padding: 0;
+      }
+
+      .changes-list li {
+        padding: 10px 0;
+        border-bottom: 1px solid #e5e7eb;
+        position: relative;
+        padding-left: 25px;
+      }
+
+      .changes-list li:before {
+        content: "•";
+        color: #2563eb;
+        font-weight: bold;
+        position: absolute;
+        left: 0;
+      }
+
+      .changes-list li:last-child {
+        border-bottom: none;
+      }
+
+      .method-comparison {
+        background: #f8fafc;
+        border-radius: 8px;
+        overflow: hidden;
+        margin: 20px 0;
+      }
+
+      .method-header {
+        background: #374151;
+        color: white;
+        padding: 15px;
+        font-weight: 600;
+      }
+
+      .method-content {
+        padding: 20px;
+      }
+
+      .method-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-bottom: 15px;
+        align-items: start;
+      }
+
+      .method-old,
+      .method-new {
+        padding: 15px;
+        border-radius: 6px;
+      }
+
+      .method-old {
+        background: #fee2e2;
+        border-left: 4px solid #ef4444;
+      }
+
+      .method-new {
+        background: #dcfce7;
+        border-left: 4px solid #22c55e;
+      }
+
+      .method-old h5,
+      .method-new h5 {
+        margin-bottom: 10px;
+        font-weight: 600;
+      }
+
+      .method-old h5 {
+        color: #dc2626;
+      }
+
+      .method-new h5 {
+        color: #16a34a;
+      }
+
+      .footer {
+        margin-top: 60px;
+        padding-top: 30px;
+        border-top: 2px solid #e5e7eb;
+        text-align: center;
+        color: #64748b;
+      }
+
+      @media print {
+        body {
+          font-size: 12px;
+        }
+        .header h1 {
+          font-size: 2rem;
+        }
+        h2 {
+          font-size: 1.4rem;
+        }
+        h3 {
+          font-size: 1.2rem;
+        }
+        .changes-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 768px) {
+        .changes-grid {
+          grid-template-columns: 1fr;
+        }
+        .method-row {
+          grid-template-columns: 1fr;
+        }
+        .info-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>Gather Hub New SDK Migration</h1>
+    </div>
+
+    <div class="section">
+      </div>
+      <div class="section">
+        <h2>Old Payload & Implementation</h2>
+
+        <h3>Legacy Payload Fields</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Description</th>
+              <th>Usage</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="highlight">temperature</span></td>
+              <td>float</td>
+              <td>Current beacon temperature</td>
+              <td>Used to determine excursion (2-8°C check)</td>
+            </tr>
+            <tr>
+              <td><span class="highlight">macAddress</span></td>
+              <td>String</td>
+              <td>Beacon MAC Address</td>
+              <td>Displayed on Scan Screen</td>
+            </tr>
+            <tr>
+              <td><span class="highlight">firmwareVersion</span></td>
+              <td>String</td>
+              <td>Beacon firmware version</td>
+              <td>Displayed on Device Details Screen</td>
+            </tr>
+            <tr>
+                <td><span class="highlight">frameVersion</span></td>
+                <td>int</td>
+                <td>Frame type identifier for parsing</td>
+                <td>Used to identify the frame type</td>
+              </tr>
+              <tr>
+                <td><span class="highlight">battery</span></td>
+                <td>int</td>
+                <td>Battery percentage</td>
+                <td>Used to identify the battery percentage</td>
+              </tr>
+              <tr>
+                <td><span class="highlight">Humidity</span></td>
+                <td>float</td>
+                <td>Current humidity</td>
+                <td>Used to identify the humidity</td>
+              </tr>
+          </tbody>
+        </table>
+
+        <h3>Scan Screen (Old Implementation)</h3>
+        <ul class="changes-list">
+          <li>
+            Displayed scanned device cards with <strong>temperature</strong>,
+            <strong>excursion status</strong>, and <strong>MAC ID</strong>.
+          </li>
+          <li>
+            Excursion was detected by comparing
+            <strong>temperature with 2–8°C inclusive</strong>.
+            <ul>
+              <li>If in range → no excursion</li>
+              <li>If out of range → alert shown</li>
+            </ul>
+          </li>
+          <li>
+            Connect button was shown
+            <strong>only when excursion occurred</strong>.
+          </li>
+          <li>
+            On click, the connect method attempted to establish a device
+            connection.
+          </li>
+        </ul>
+
+        <h3>Device Details Screen (Old Implementation)</h3>
+        <ul class="changes-list">
+          <li>On connection, queried full historical beacon data.</li>
+          <li>
+            Parsed historical data to find the
+            <strong>latest excursion event</strong> (2–8°C comparison).
+          </li>
+          <li>
+            Displayed:
+            <ul>
+              <li>Time of last excursion event</li>
+              <li>Graph starting slightly before that event</li>
+            </ul>
+          </li>
+          <li>
+            Generated <strong>CSV export</strong> with all beacon records.
+          </li>
+          <li>Displayed <strong>firmwareVersion</strong> from payload.</li>
+          <li>
+            If user was <strong>admin</strong>, showed update icon to trigger
+            <strong>firmwareUpgrade</strong>.
+          </li>
+        </ul>
+
+        <div class="method-comparison">
+          <div class="method-header">Last Excursion Event Detection (Old)</div>
+          <div class="method-content">
+            <div class="method-old">
+              <h5>Temperature Range Based</h5>
+              <p>
+                Excursion was identified by simple comparison against 2–8°C
+                inclusive range.
+              </p>
+              <p>
+                <strong>Limitation:</strong> No dedicated excursion flags in
+                payload → required custom parsing each time.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>New Implementation</h2>
+        <div class="info-box">
+          <h4>Current Behavior Summary</h4>
+          <p>
+            This section documents the updated SDK payload and new logic for
+            Scan Screen and Device Details Screen.
+          </p>
+        </div>
+        <h3>New Payload Fields</h3>
+
+        <h4>Device Static Information Frame</h4>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Description</th>
+              <th>Example Value</th>
+              <th>Range/Format</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="highlight">companyId</span></td>
+              <td>String</td>
+              <td>Manufacturer ID (Google: 0x00E0)</td>
+              <td>"E000"</td>
+              <td>Hex format, Little Endian</td>
+            </tr>
+            <tr>
+              <td><span class="highlight">googleId</span></td>
+              <td>String</td>
+              <td>Google service identifier</td>
+              <td>"19"</td>
+              <td>Fixed value</td>
+            </tr>
+            <tr>
+              <td><span class="highlight">frameVersion</span></td>
+              <td>int</td>
+              <td>Frame type identifier for parsing</td>
+              <td>9</td>
+              <td>Integer value</td>
+            </tr>
+            <tr>
+              <td><span class="highlight">firmwareVersion</span></td>
+              <td>String</td>
+              <td>Device firmware version</td>
+              <td>"3.2.7"</td>
+              <td>Semantic versioning</td>
+            </tr>
+            <tr>
+              <td><span class="highlight">battery</span></td>
+              <td>int</td>
+              <td>Battery percentage</td>
+              <td>71</td>
+              <td>0-100%</td>
+            </tr>
+            <tr>
+              <td><span class="highlight">macAddress</span></td>
+              <td>String</td>
+              <td>Unique device MAC address</td>
+              <td>"E7:EC:CC:3C:D3:60"</td>
+              <td>Standard MAC format</td>
+            </tr>
+            <tr>
+              <td><span class="highlight">peripheralSupportInfo</span></td>
+              <td>Object</td>
+              <td>Supported peripheral capabilities</td>
+              <td>PeripheralSupportInfo</td>
+              <td>Complex object</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Enhanced Combination Frame (Sensor Data + Multi-Level Alarms)</h4>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Description</th>
+              <th>Values/Range</th>
+              <th>Business Logic</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="highlight">temperature</span></td>
+              <td>float</td>
+              <td>Current temperature in Celsius</td>
+              <td>-40°C to +85°C</td>
+              <td>Primary monitoring parameter</td>
+            </tr>
+            <tr>
+              <td>
+                <span class="highlight">temperatureUpperLimit1AlarmMark</span>
+              </td>
+              <td>int</td>
+              <td>Normal temp upper limit alarm (20-50°C range)</td>
+              <td>0=Normal, 1=Alarm</td>
+              <td>Standard excursion detection</td>
+            </tr>
+            <tr>
+              <td>
+                <span class="highlight">temperatureLowerLimit1AlarmMark</span>
+              </td>
+              <td>int</td>
+              <td>Normal temp lower limit alarm (20-50°C range)</td>
+              <td>0=Normal, 1=Alarm</td>
+              <td>Standard excursion detection</td>
+            </tr>
+            <tr>
+              <td>
+                <span class="highlight">temperatureUpperLimit2AlarmMark</span>
+              </td>
+              <td>int</td>
+              <td>Low temp upper limit alarm (-30 to 15°C range)</td>
+              <td>0=Normal, 1=Alarm</td>
+              <td>Cold chain specific monitoring</td>
+            </tr>
+            <tr>
+              <td>
+                <span class="highlight">temperatureLowerLimit2AlarmMark</span>
+              </td>
+              <td>int</td>
+              <td>Low temp lower limit alarm (-30 to 15°C range)</td>
+              <td>0=Normal, 1=Alarm</td>
+              <td>Cold chain specific monitoring</td>
+            </tr>
+            <tr>
+              <td>
+                <span class="highlight">lightIntensityUpperLimitAlarmMark</span>
+              </td>
+              <td>int</td>
+              <td>Light intensity upper threshold alarm</td>
+              <td>0=Normal, 1=Alarm</td>
+              <td>Light exposure monitoring</td>
+            </tr>
+            <tr>
+              <td>
+                <span class="highlight">lightIntensityLowerLimitAlarmMark</span>
+              </td>
+              <td>int</td>
+              <td>Light intensity lower threshold alarm</td>
+              <td>0=Normal, 1=Alarm</td>
+              <td>Darkness detection</td>
+            </tr>
+            <tr>
+              <td><span class="highlight">lightEventTimestamp</span></td>
+              <td>long</td>
+              <td>Light trigger timestamp (milliseconds)</td>
+              <td>Device-relative time</td>
+              <td>Last light event occurrence</td>
+            </tr>
+            <tr>
+              <td><span class="highlight">tempEventTimestamp</span></td>
+              <td>long</td>
+              <td>Temperature trigger timestamp (milliseconds)</td>
+              <td>Device-relative time</td>
+              <td>Last temperature event occurrence</td>
+            </tr>
+            <tr>
+              <td><span class="highlight">currentTimestamp</span></td>
+              <td>long</td>
+              <td>Current device timestamp (milliseconds)</td>
+              <td>Device uptime</td>
+              <td>Reference for relative timestamps</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+        <h3>Scan Screen (New)</h3>
+        <ul class="changes-list">
+          <li>
+            Added <code>setManufacturerIdHexLe</code> to enable scanning of new
+            beacons.
+          </li>
+          <li>
+            Displayed device cards with <strong>temperature</strong>,
+            <strong>excursion status</strong>, and <strong>MAC ID</strong>.
+          </li>
+          <li>
+            Excursion detection = based on
+            <strong>temperatureUpperLimit2AlarmMark</strong> and
+            <strong>temperatureLowerLimit2AlarmMark</strong>.
+            <ul>
+              <li>If either = 1 → excursion alert</li>
+              <li>If both = 0 → no excursion</li>
+            </ul>
+          </li>
+          <div class="method-old">
+            <p>
+              This has not been implemented yet due to the uncertainty of the which flag to choose for excursion detection out of the below four:
+                <code>temperatureUpperLimit1AlarmMark</code><br>
+                <code>temperatureLowerLimit1AlarmMark</code><br>
+                <code>temperatureUpperLimit2AlarmMark</code><br>
+                <code>temperatureLowerLimit2AlarmMark</code>
+            </p>
+          </div>
+          <li>Connect button shown only if excursion detected.</li>
+          <li>On connect → device connection established.</li>
+        </ul>
+
+        <h3>Device Details Screen (New)</h3>
+        <ul class="changes-list">
+          <li>
+            On connection, still queries full historical data. (Reason:
+            <code>tempEventTimestamp</code> is not absolute Unix epoch).
+          </li>
+          <li>
+            Displays last excursion time and graph (same as old, but parsing
+            could be eliminated in future).
+          </li>
+          <div class="info-box">
+            <h4>💡 Note on tempEventTimestamp</h4>
+            <p>
+              This value is relative time, but it’s unclear whether it starts
+              from the device’s power-on or the excursion event itself. Because
+              of this uncertainty, we still rely on historical data to get the
+              actual date-time of the last excursion event.
+            </p>
+          </div>
+          <li>CSV export (unchanged).</li>
+          <li><strong>firmwareVersion</strong> display (unchanged).</li>
+          <li>
+            <code>firmwareUpgrade</code> feature for Admin users (unchanged).
+          </li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h2>2. Business Logic Implementation Assumptions</h2>
+
+        <p>
+          This section addresses critical business logic considerations and
+          provides implementation guidance for the enhanced alarm system and
+          event detection mechanisms.
+        </p>
+
+        <h3>2.1 Multi-Threshold Excursion Event Detection</h3>
+
+
+        <p>
+          <strong>Normal Temperature Range (20-50°C):</strong> This range is
+          designed for standard environmental monitoring applications where room
+          temperature variations need to be tracked. The system uses
+          <span class="highlight">temperatureUpperLimit1AlarmMark</span> and
+          <span class="highlight">temperatureLowerLimit1AlarmMark</span> for
+          this range.
+        </p>
+
+        <p>
+          <strong>Low Temperature Range (2 to 8°C):</strong> Specifically
+          designed for pharmaceutical and food supply chain monitoring, this
+          range uses
+          <span class="highlight">temperatureUpperLimit2AlarmMark</span> and
+          <span class="highlight">temperatureLowerLimit2AlarmMark</span>.
+        </p>
+        <div class="info-box">
+            <p>
+                <strong>Question:</strong> Should we use
+                <span class="highlight">temperatureUpperLimit2AlarmMark</span> and
+                <span class="highlight">temperatureLowerLimit2AlarmMark</span> for
+                excursion detection?
+              </p>
+      
+              <p>
+                <strong>Analysis:</strong> Based on the documented temperature ranges
+                and Minew app configuration analysis, the "Limit2" flags correspond to
+                cold chain monitoring (2-8°C range), which aligns with typical
+                pharmaceutical storage requirements.
+              </p>
+        </div>
+
+        <h3>2.2 Advanced Last Excursion Detection Mechanism</h3>
+
+        <div class="warning">
+          <h4>Timestamp Format Considerations</h4>
+          <p>
+            The <span class="highlight">tempEventTimestamp</span> value uses
+            device-relative timing rather than absolute Unix timestamps. This
+            requires careful handling to convert to meaningful application
+            timestamps.
+          </p>
+        </div>
+
+        <p>
+          The enhanced beacon payload provides
+          <span class="highlight">tempEventTimestamp</span> which indicates the
+          last temperature excursion event time. However, this timestamp is
+          relative to device startup or current time, not an absolute Unix
+          timestamp.
+        </p>
+
+       <div class="info-box">
+        <p>
+            <strong>Question:</strong> Where does the
+            <span class="highlight">tempEventTimestamp</span> start from, and
+            should we use this for excursion start time calculation?
+          </p>
+  
+          <p>
+            <strong>Analysis:</strong> The
+            <span class="highlight">tempEventTimestamp</span> appears to be
+            relative to device startup or current operational session rather than
+            Unix epoch time.
+            This is evidenced by the relatively small timestamp
+            values(79616700) that don't align with standard Unix timestamps.<br>
+            This value is relative time, but it’s unclear whether it starts from the device’s power-on or the excursion event itself. Because of this uncertainty, we still rely on historical data to get the actual date-time of the last excursion event.
+          </p>
+<p>          Historical Data Continuity
+   If we only use tempEventTimestamp to fetch the last excursion start time, we won’t capture the data point just before the excursion began. As a result, the graph may not show the blue circle or the connecting line leading up to the last excursion.</p>
+       </div>
+
+
+
+
+      <div class="section">
+        <h2>3. Critical Questions and Implementation Guidance</h2>
+
+
+       
+
+
+        <h3>3.3 Question 3: Historical Data Visualization Continuity</h3>
+
+        <p>
+          <strong>Question:</strong> If we use
+          <span class="highlight">tempEventTimestamp</span> for fetching the
+          last excursion timestamp, how do we maintain graph continuity showing
+          the transition from normal to excursion state?
+        </p>
+
+        <p>
+          <strong>Analysis:</strong> Using only event timestamps creates gaps in
+          data visualization where the transition point (blue circle and
+          connecting line) cannot be displayed without the immediate
+          pre-excursion data point.
+        </p>
+
+        <p>
+          <strong>Recommended Solution:</strong> Implement a hybrid data
+          retrieval strategy:
+        </p>
+
+        <ul class="changes-list">
+          <li>
+            <strong>Real-time Monitoring:</strong> Use beacon alarm flags for
+            immediate excursion detection
+          </li>
+          <li>
+            <strong>Historical Context:</strong> Query historical data around
+            event timestamps to retrieve transition points
+          </li>
+          <li>
+            <strong>Visualization Enhancement:</strong> Combine beacon data with
+            historical queries to create seamless graph transitions
+          </li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h2>4. SDK Changes and Migration Details</h2>
+
+        <p>
+          This section provides comprehensive details about the specific changes
+          between the old and new SDK versions, including method modifications,
+          new frame structures, and enhanced capabilities.
+        </p>
+
+        <div class="changes-grid">
+          <div class="changes-column">
+            <h4>🆕 New Features and Methods</h4>
+            <ul class="changes-list">
+              <li>
+                <strong>Enhanced Beacon Frames:</strong> New CombinationFrame
+                with multi-threshold alarm capabilities
+              </li>
+              <li>
+                <strong>Light Sensor Support:</strong> Complete light intensity
+                monitoring and historical data
+              </li>
+              <li>
+                <strong>Dual Temperature Ranges:</strong> Separate normal and
+                cold chain temperature monitoring
+              </li>
+              <li>
+                <strong>Advanced Alarm Strategy:</strong> Configurable alarm
+                duration and threshold counting
+              </li>
+              <li>
+                <strong>LED Configuration:</strong> Comprehensive LED control
+                with brightness and timing
+              </li>
+              <li>
+                <strong>Separate Data Management:</strong> Independent
+                temperature and light data handling
+              </li>
+              <li>
+                <strong>Enhanced Authentication:</strong> Improved device
+                security with changeable passwords
+              </li>
+            </ul>
+          </div>
+
+          <div class="changes-column">
+            <h4>🔄 Modified Existing Features</h4>
+            <ul class="changes-list">
+              <li>
+                <strong>Frame Structure:</strong> Updated DeviceStaticInfoFrame
+                with peripheralSupportInfo
+              </li>
+              <li>
+                <strong>Historical Data:</strong> Separated temperature and
+                light data queries
+              </li>
+              <li>
+                <strong>Sensor Configuration:</strong> Enhanced
+                HtSensorConfiguration with dual threshold support
+              </li>
+              <li>
+                <strong>Advertising Parameters:</strong> Improved slot-based
+                configuration management
+              </li>
+              <li>
+                <strong>Connection Management:</strong> Enhanced authentication
+                flow with better error handling
+              </li>
+              <li>
+                <strong>Firmware Upgrade:</strong> Improved OTA file
+                verification and progress tracking
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

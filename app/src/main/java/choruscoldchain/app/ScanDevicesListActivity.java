@@ -141,9 +141,12 @@ public class ScanDevicesListActivity extends BaseActivity {
 
         ivChorusLogo = findViewById(R.id.iv_chorus_logo);
         loadChorusLogo();
-        
+
         // Setup logger button
         binding.btnBeaconLogger.setOnClickListener(v -> openBeaconLogger());
+
+        // Test timestamp correction functionality
+        BeaconTimestampCorrector.testTimestampCorrection();
 
         View decor = getWindow().getDecorView();
         decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
@@ -1317,6 +1320,50 @@ public class ScanDevicesListActivity extends BaseActivity {
     private void navigateToDeviceDetails(int batteryLevel, String firmwareVersion, float currentTemperature) {
         Log.d("ScanDebug", "navigateToDeviceDetails called");
         
+        // Find the first actual excursion from historical data instead of using dynamic tempEventTimestamp
+        final long correctedFirstExcursionTimestamp;
+        final long correctedCurrentTimestamp;
+        
+        // Get current timestamp from beacon for reference
+        if (mst03Entity != null) {
+            CombinationFrame comboFrame = (CombinationFrame) mst03Entity.getMinewFrame(FrameType.CUSTOM_COMBINATION_FRAME);
+            if (comboFrame != null) {
+                long currentTimestamp = comboFrame.getCurrentTimestamp();
+                correctedCurrentTimestamp = BeaconTimestampCorrector.correctBeaconTimestamp(currentTimestamp, currentTimestamp);
+                
+                // Find the first excursion from historical data
+                long firstExcursionTimestamp = -1;
+                synchronized (completeHistoricalData) {
+                    if (!completeHistoricalData.isEmpty()) {
+                        // Find the first temperature reading outside the normal range (2-8°C)
+                        for (HtData htData : completeHistoricalData) {
+                            float temp = htData.getTemperature();
+                            if (temp < 2.0f || temp > 8.0f) {
+                                firstExcursionTimestamp = htData.getTimestamps();
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if (firstExcursionTimestamp != -1) {
+                    // Correct the first excursion timestamp to current system time
+                    correctedFirstExcursionTimestamp = BeaconTimestampCorrector.correctBeaconTimestamp(firstExcursionTimestamp, currentTimestamp);
+                    Log.d("ScanDebug", String.format("Found first excursion from historical data: %d -> %s", 
+                        firstExcursionTimestamp, BeaconTimestampCorrector.timestampToHumanReadable(correctedFirstExcursionTimestamp)));
+                } else {
+                    correctedFirstExcursionTimestamp = -1;
+                    Log.d("ScanDebug", "No excursion found in historical data");
+                }
+            } else {
+                correctedFirstExcursionTimestamp = -1;
+                correctedCurrentTimestamp = -1;
+            }
+        } else {
+            correctedFirstExcursionTimestamp = -1;
+            correctedCurrentTimestamp = -1;
+        }
+        
         runOnUiThread(() -> {
             // Dismiss connection dialog
             WaitDialog.dismiss();
@@ -1325,9 +1372,10 @@ public class ScanDevicesListActivity extends BaseActivity {
             isConnecting = false;
             mDevicesListAdapter.setConnectButtonsEnabled(true);
             
-            // Navigate to device details screen with real device data
+            // Navigate to device details screen with real device data and corrected timestamps
             Intent intent = DeviceDetailsActivity.newIntent(ScanDevicesListActivity.this, mst03Entity, 
-                                                           batteryLevel, firmwareVersion, currentTemperature);
+                                                           batteryLevel, firmwareVersion, currentTemperature,
+                                                           correctedFirstExcursionTimestamp, correctedCurrentTimestamp);
             startActivity(intent);
             
             // Disconnect from device after navigation (with a small delay to ensure navigation completes)
@@ -2126,9 +2174,44 @@ public class ScanDevicesListActivity extends BaseActivity {
             java.io.BufferedWriter bufferedWriter = new java.io.BufferedWriter(writer);
 
             bufferedWriter.write(
-                    "Record Number,Unix Timestamp,Date & Time,Temperature (°C),Humidity (%),Temperature Status,Excursion Type,Device MAC Address,Trip Duration (minutes),Notes\n");
+                    "Record Number,Date & Time,RTC Timestamp,Temperature (°C),Temperature Status,Excursion Type,Device MAC Address,Trip Duration (minutes),Notes\n");
 
-            long tripStartTime = tripData.isEmpty() ? 0 : tripData.get(0).getTimestamps();
+            // Use first excursion from historical data as trip start time
+            long tripStartTime;
+            if (mst03Entity != null) {
+                CombinationFrame comboFrame = (CombinationFrame) mst03Entity.getMinewFrame(FrameType.CUSTOM_COMBINATION_FRAME);
+                if (comboFrame != null) {
+                    long currentTimestamp = comboFrame.getCurrentTimestamp();
+                    
+                    // Find the first excursion from the trip data
+                    long firstExcursionTimestamp = -1;
+                    for (HtData htData : tripData) {
+                        float temp = htData.getTemperature();
+                        if (temp < 2.0f || temp > 8.0f) {
+                            firstExcursionTimestamp = htData.getTimestamps();
+                            break;
+                        }
+                    }
+                    
+                    if (firstExcursionTimestamp != -1) {
+                        // Correct the first excursion timestamp to current system time
+                        long correctedFirstExcursionTimestamp = BeaconTimestampCorrector.correctBeaconTimestamp(firstExcursionTimestamp, currentTimestamp);
+                        tripStartTime = correctedFirstExcursionTimestamp * 1000; // Convert to milliseconds
+                        Log.d("BeaconRawData", String.format("CSV using first excursion from historical data: %d -> %s", 
+                            firstExcursionTimestamp, BeaconTimestampCorrector.timestampToHumanReadable(correctedFirstExcursionTimestamp)));
+                    } else {
+                        tripStartTime = tripData.isEmpty() ? 0 : tripData.get(0).getTimestamps();
+                        Log.d("BeaconRawData", "CSV using first historical record as trip start (no excursion found)");
+                    }
+                } else {
+                    tripStartTime = tripData.isEmpty() ? 0 : tripData.get(0).getTimestamps();
+                    Log.d("BeaconRawData", "CSV using first historical record as trip start (no beacon data)");
+                }
+            } else {
+                tripStartTime = tripData.isEmpty() ? 0 : tripData.get(0).getTimestamps();
+                Log.d("BeaconRawData", "CSV using first historical record as trip start (no device)");
+            }
+            
             long tripEndTime = tripData.isEmpty() ? 0 : tripData.get(tripData.size() - 1).getTimestamps();
             long tripDurationMinutes = tripData.isEmpty() ? 0 : (tripEndTime - tripStartTime) / (1000 * 60);
 
@@ -2137,9 +2220,9 @@ public class ScanDevicesListActivity extends BaseActivity {
                 long timestamp_ms = htData.getTimestamps();
 
                 String dateTime = getLocaleAwareCSVDateFormat().format(new java.util.Date(timestamp_ms));
+                String rtcTimestamp = getLocaleAwareCSVDateFormat().format(new java.util.Date());
 
                 float temperature = htData.getTemperature();
-                float humidity = htData.getHumidity();
 
                 String temperatureStatus;
                 String excursionType;
@@ -2163,12 +2246,11 @@ public class ScanDevicesListActivity extends BaseActivity {
 
                 long timeFromStart = tripData.isEmpty() ? 0 : (timestamp_ms - tripStartTime) / (1000 * 60);
 
-                bufferedWriter.write(String.format("%d,%d,%s,%.2f,%.2f,%s,%s,%s,%d,%s\n",
+                bufferedWriter.write(String.format("%d,%s,%s,%.2f,%s,%s,%s,%d,%s\n",
                         i + 1,
-                        timestamp_ms,
                         dateTime,
+                        rtcTimestamp,
                         temperature,
-                        humidity,
                         temperatureStatus,
                         excursionType,
                         deviceMacAddress,
@@ -2854,17 +2936,46 @@ public class ScanDevicesListActivity extends BaseActivity {
         boolean hasLightEvent = comboFrame.getLightIntensityUpperLimitAlarmMark() == 1 || 
                                comboFrame.getLightIntensityLowerLimitAlarmMark() == 1;
         
+        // Initialize logger for both excursion and light event logging
+        BeaconLoggerActivity logger = BeaconLoggerActivity.getInstance();
+        
         if (hasTemperatureExcursion) {
             // Get excursion details directly from beacon
             long excursionStartTimeBeacon = comboFrame.getTempEventTimestamp();
             long currentTimeBeacon = comboFrame.getCurrentTimestamp();
-            long excursionDurationMs = normalizeToMillis(currentTimeBeacon) - normalizeToMillis(excursionStartTimeBeacon);
-            long excursionStartWallClock = alignBeaconTimestampToWallClock(excursionStartTimeBeacon, currentTimeBeacon);
             
-            // Create excursion data with wall-clock timestamp
+            // Correct the timestamp to current system time
+            long correctedExcursionStartTime = BeaconTimestampCorrector.correctBeaconTimestamp(excursionStartTimeBeacon, currentTimeBeacon);
+            long excursionDurationMs = estimateBeaconDurationMs(excursionStartTimeBeacon, currentTimeBeacon);
+            
+            // Log timestamp correction details
+            BeaconTimestampCorrector.logTimestampCorrection(macAddress, excursionStartTimeBeacon, currentTimeBeacon, "tempEvent");
+            
+            // Log raw tempEventTimestamp as simple message
+            if (logger != null) {
+                Log.d("DirectExcursion", "About to log tempEventTimestamp: " + excursionStartTimeBeacon);
+                logger.logTempEventTimestamp(macAddress, excursionStartTimeBeacon);
+                // Also log current timestamp for comparison
+                logger.addLogEntry(String.format("currentTimestamp RAW: %d (Device: %s)", currentTimeBeacon, macAddress));
+                logger.addLogEntry(String.format("TIMESTAMP RELATIONSHIP - tempEvent: %d, current: %d, diff: %d (Device: %s)", 
+                    excursionStartTimeBeacon, currentTimeBeacon, currentTimeBeacon - excursionStartTimeBeacon, macAddress));
+                
+                // Log corrected timestamp
+                String correctedTimeStr = BeaconTimestampCorrector.timestampToHumanReadable(correctedExcursionStartTime);
+                logger.addLogEntry(String.format("CORRECTED tempEventTimestamp: %d -> %s (Device: %s)", 
+                    excursionStartTimeBeacon, correctedTimeStr, macAddress));
+                httpLogger.sendSimpleMessage(String.format("CORRECTED tempEventTimestamp: %d -> %s (Device: %s)", 
+                    excursionStartTimeBeacon, correctedTimeStr, macAddress));
+                
+                Log.d("DirectExcursion", "Finished logging tempEventTimestamp");
+            } else {
+                Log.w("DirectExcursion", "Logger is null, cannot log tempEventTimestamp");
+            }
+            
+            // Create excursion data with corrected wall-clock timestamp
             ExcursionData excursion = new ExcursionData(
                 temperature, 
-                excursionStartWallClock, 
+                correctedExcursionStartTime * 1000, // Convert to milliseconds for ExcursionData
                 excursionType, 
                 macAddress
             );
@@ -2877,15 +2988,14 @@ public class ScanDevicesListActivity extends BaseActivity {
             
             Log.d("DirectExcursion", String.format(
                 "Excursion detected: %s - BeaconStart: %d, WallClockStart: %d (%s), Duration: %d ms, Temp: %.2f°C",
-                excursionType, excursionStartTimeBeacon, excursionStartWallClock, new java.util.Date(excursionStartWallClock), excursionDurationMs, temperature
+                excursionType, excursionStartTimeBeacon, correctedExcursionStartTime, new java.util.Date(correctedExcursionStartTime), excursionDurationMs, temperature
             ));
             
             // Log to beacon logger
-            BeaconLoggerActivity logger = BeaconLoggerActivity.getInstance();
             if (logger != null) {
                 logger.addLogEntry(String.format(
                     "DIRECT EXCURSION DETECTED: %s - %s - Start: %s - Duration: %d ms - Temp: %.2f°C",
-                    macAddress, excursionType, new java.util.Date(excursionStartWallClock).toString(), excursionDurationMs, temperature
+                    macAddress, excursionType, new java.util.Date(correctedExcursionStartTime).toString(), excursionDurationMs, temperature
                 ));
             }
         }
@@ -2894,16 +3004,24 @@ public class ScanDevicesListActivity extends BaseActivity {
         if (hasLightEvent) {
             long lightEventTimeBeacon = comboFrame.getLightEventTimestamp();
             long currentTimeBeacon = comboFrame.getCurrentTimestamp();
-            long lightEventWallClock = alignBeaconTimestampToWallClock(lightEventTimeBeacon, currentTimeBeacon);
+            
+            // Correct the timestamp to current system time
+            long correctedLightEventTime = BeaconTimestampCorrector.correctBeaconTimestamp(lightEventTimeBeacon, currentTimeBeacon);
+            
+            // Log timestamp correction details
+            BeaconTimestampCorrector.logTimestampCorrection(macAddress, lightEventTimeBeacon, currentTimeBeacon, "lightEvent");
+            
             Log.d("DirectExcursion", "Light event detected for " + macAddress + " at beaconTime=" + lightEventTimeBeacon + 
-                    ", wallClock=" + lightEventWallClock + " (" + new java.util.Date(lightEventWallClock) + ")");
+                    ", correctedTime=" + correctedLightEventTime + " (" + BeaconTimestampCorrector.timestampToHumanReadable(correctedLightEventTime) + ")");
             
             // Log to beacon logger
-            BeaconLoggerActivity logger = BeaconLoggerActivity.getInstance();
             if (logger != null) {
+                String correctedTimeStr = BeaconTimestampCorrector.timestampToHumanReadable(correctedLightEventTime);
+                logger.addLogEntry(String.format("CORRECTED LIGHT EVENT: %s - Raw: %d, Corrected: %s", 
+                    macAddress, lightEventTimeBeacon, correctedTimeStr));
                 logger.addLogEntry(String.format(
-                    "LIGHT EVENT (END OF TRIP): %s - Time: %s",
-                    macAddress, new java.util.Date(lightEventWallClock).toString()
+                    "LIGHT EVENT (END OF TRIP): %s - Raw Time: %d, Corrected Time: %s",
+                    macAddress, lightEventTimeBeacon, correctedTimeStr
                 ));
             }
         }
@@ -2917,7 +3035,7 @@ public class ScanDevicesListActivity extends BaseActivity {
             currentData.setTemperature(temperature);
             currentData.setHumidity(0.0f); // Not available in beacon
             // Persist current sample timestamp as wall-clock for consistency in details/CSV
-            long currentWallClock = alignBeaconTimestampToWallClock(comboFrame.getCurrentTimestamp(), comboFrame.getCurrentTimestamp());
+            long currentWallClock = System.currentTimeMillis();
             currentData.setTimestamps(currentWallClock);
             completeHistoricalData.add(currentData);
         }
@@ -3090,22 +3208,44 @@ public class ScanDevicesListActivity extends BaseActivity {
     }
 
     /**
-     * Converts a beacon timestamp to wall-clock time using the beacon's currentTimestamp as reference.
-     * Handles seconds vs milliseconds automatically.
+     * Converts a beacon event timestamp to wall-clock using the beacon's currentTimestamp as reference.
+     * The event/current values are relative (device time) and share the same unit (seconds or ms).
+     * We infer the unit by testing both seconds and milliseconds candidates.
      */
     private long alignBeaconTimestampToWallClock(long beaconEventTimestamp, long beaconCurrentTimestamp) {
-        long eventMs = normalizeToMillis(beaconEventTimestamp);
-        long currentMs = normalizeToMillis(beaconCurrentTimestamp);
+        long diffRaw = Math.abs(beaconCurrentTimestamp - beaconEventTimestamp);
         long nowMs = System.currentTimeMillis();
-        long delta = Math.max(0L, currentMs - eventMs);
-        return nowMs - delta;
+        long candidateMs = nowMs - diffRaw;            // assume diff is already in ms
+        long candidateSec = nowMs - diffRaw * 1000L;   // assume diff is in seconds
+        long twoYearsMs = 730L * 24 * 60 * 60 * 1000;  // 2 years
+        long lowerBound = nowMs - twoYearsMs;
+        boolean aOk = candidateMs <= nowMs && candidateMs >= lowerBound;
+        boolean bOk = candidateSec <= nowMs && candidateSec >= lowerBound;
+        if (aOk && !bOk) return candidateMs;
+        if (bOk && !aOk) return candidateSec;
+        // Heuristic: small diffs (< 1,000,000) are likely seconds; larger diffs likely milliseconds
+        if (diffRaw < 1_000_000L) return candidateSec;
+        return candidateMs;
     }
 
     /**
-     * Normalizes a timestamp to milliseconds. If it looks like seconds (< 1e12), multiply by 1000.
+     * Estimate duration in milliseconds between two beacon timestamps that share the same unit.
      */
-    private long normalizeToMillis(long ts) {
-        return ts < 10000000000L ? ts * 1000L : ts;
+    private long estimateBeaconDurationMs(long earlier, long later) {
+        long diffRaw = Math.max(0L, later - earlier);
+        // If diff is small, treat as seconds; otherwise milliseconds
+        return (diffRaw < 1_000_000L) ? diffRaw * 1000L : diffRaw;
+    }
+
+    /**
+     * Normalizes a timestamp that may be in seconds or milliseconds to milliseconds.
+     * Treat values < 10,000,000,000 as seconds; otherwise assume milliseconds.
+     */
+    private long normalizeToMillis(long rawTimestamp) {
+        if (rawTimestamp <= 0L) {
+            return 0L;
+        }
+        return (rawTimestamp < 10_000_000_000L) ? rawTimestamp * 1000L : rawTimestamp;
     }
 
     /**
@@ -3116,20 +3256,26 @@ public class ScanDevicesListActivity extends BaseActivity {
     private List<HtData> alignHistoricalDataToWallClock(List<HtData> input) {
         if (input == null || input.isEmpty()) return input;
         try {
+            // Heuristic: consider timestamps that, when interpreted as ms, give year < 2005 as old
             boolean looksOld = false;
             for (int i = 0; i < Math.min(5, input.size()); i++) {
-                long ts = input.get(i).getTimestamps();
-                long tsMs = normalizeToMillis(ts);
+                long tsRaw = input.get(i).getTimestamps();
+                long tsMs = tsRaw < 10000000000L ? tsRaw * 1000L : tsRaw;
                 java.util.Calendar c = java.util.Calendar.getInstance();
                 c.setTimeInMillis(tsMs);
                 int year = c.get(java.util.Calendar.YEAR);
                 if (year < 2005) { looksOld = true; break; }
             }
             if (!looksOld) return input;
-            long firstMs = normalizeToMillis(input.get(0).getTimestamps());
+            long firstRaw = input.get(0).getTimestamps();
+            long firstMs = firstRaw < 10000000000L ? firstRaw * 1000L : firstRaw;
             long nowMs = System.currentTimeMillis();
-            // Assume first sample is relatively recent in device time; compute delta to shift forward
-            long delta = Math.max(0L, nowMs - firstMs);
+            // Shift the whole series so that the first sample aligns to now - seriesDuration
+            long lastRaw = input.get(input.size()-1).getTimestamps();
+            long lastMs = lastRaw < 10000000000L ? lastRaw * 1000L : lastRaw;
+            long seriesDuration = Math.max(0L, lastMs - firstMs);
+            long targetStart = Math.max(0L, nowMs - seriesDuration);
+            long delta = Math.max(0L, targetStart - firstMs);
             List<HtData> out = new ArrayList<>(input.size());
             for (HtData d : input) {
                 HtData copy = new HtData();

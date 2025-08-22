@@ -37,6 +37,8 @@ public class HttpLogger {
 
     public void sendSimpleMessage(String message) {
         try {
+            Log.d(TAG, "sendSimpleMessage called with: " + message);
+            
             JSONObject logData = new JSONObject();
             logData.put("timestamp",
                     new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date()));
@@ -44,6 +46,7 @@ public class HttpLogger {
             logData.put("eventType", "simpleMessage");
 
             String jsonMessage = logData.toString();
+            Log.d(TAG, "Simple message JSON prepared: " + jsonMessage);
             sendLogAsync(jsonMessage);
         } catch (Exception e) {
             Log.e(TAG, "Error creating simple message log: " + e.getMessage());

@@ -24,6 +24,7 @@ public class BeaconLoggerActivity extends AppCompatActivity {
     private TextView tvStatus;
     private TextView tvDeviceCount;
     private View statusIndicator;
+    private HttpLogger httpLogger;
     
     private StringBuilder logData = new StringBuilder();
     private ConcurrentHashMap<String, BeaconData> deviceDataMap = new ConcurrentHashMap<>();
@@ -51,10 +52,8 @@ public class BeaconLoggerActivity extends AppCompatActivity {
         
         // Add initial message after layout is ready
         tvLoggerData.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
-            addLogEntry("=== Beacon Data Logger Started ===");
-            addLogEntry("Waiting for beacon data...");
-            addLogEntry("=====================================");
         });
+        httpLogger = new HttpLogger();
     }
     
     private void initViews() {
@@ -72,11 +71,43 @@ public class BeaconLoggerActivity extends AppCompatActivity {
     }
     
     /**
+     * Log tempEventTimestamp directly to backend
+     */
+    public void logTempEventTimestamp(String macAddress, long tempEventTimestamp) {
+        Log.d(TAG, "logTempEventTimestamp called with macAddress: " + macAddress + ", tempEventTimestamp: " + tempEventTimestamp);
+        
+        // Log the raw value without any conversion
+        String message = String.format("tempEventTimestamp RAW: %d (Device: %s)", tempEventTimestamp, macAddress);
+        Log.d(TAG, "Adding log entry: " + message);
+        addLogEntry(message);
+        // Also send directly to backend for immediate logging
+        Log.d(TAG, "Sending to backend: " + message);
+        httpLogger.sendSimpleMessage(message);
+        
+        // Also log with current system time for comparison
+        long currentSystemTime = System.currentTimeMillis();
+        String comparisonMessage = String.format("tempEventTimestamp COMPARISON - Raw: %d, SystemTime: %d, Diff: %d (Device: %s)", 
+            tempEventTimestamp, currentSystemTime, Math.abs(currentSystemTime - tempEventTimestamp), macAddress);
+        Log.d(TAG, "Adding comparison log entry: " + comparisonMessage);
+        addLogEntry(comparisonMessage);
+        Log.d(TAG, "Sending comparison to backend: " + comparisonMessage);
+        httpLogger.sendSimpleMessage(comparisonMessage);
+        
+        Log.d(TAG, "logTempEventTimestamp completed");
+    }
+    
+    /**
      * Add a log entry with timestamp
      */
     public void addLogEntry(String message) {
         String timestamp = timeFormat.format(new Date());
         String logEntry = "[" + timestamp + "] " + message + "\n";
+        
+        // Send to backend if it's a tempEventTimestamp log or other important messages
+        if (message.contains("tempEventTimestamp") || message.contains("DIRECT EXCURSION DETECTED") || 
+            message.contains("LIGHT EVENT") || message.contains("EXCURSION")) {
+            httpLogger.sendSimpleMessage(message);
+        }
         
         runOnUiThread(() -> {
             logData.append(logEntry);
@@ -136,7 +167,7 @@ public class BeaconLoggerActivity extends AppCompatActivity {
             "RAW DATA - %s (%s):\n  %s\n----------------------------------------",
             macAddress, frameType, rawData
         );
-        
+        httpLogger.sendSimpleMessage(logEntry);
         addLogEntry(logEntry);
     }
     

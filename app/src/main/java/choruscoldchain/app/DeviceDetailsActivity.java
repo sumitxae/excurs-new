@@ -40,6 +40,8 @@ public class DeviceDetailsActivity extends AppCompatActivity {
     private TextView tvBatteryLevel;
     private TextView tvFirmwareVersion;
     private TextView tvExcursionEventAt;
+    private TextView tvMaxTemperatureTrip;
+    private TextView tvExcursionDuration;
     private TextView tvCurrentTemperature;
     private TextView tvCurrentStatus;
     private LineChart lineChart;
@@ -47,18 +49,22 @@ public class DeviceDetailsActivity extends AppCompatActivity {
     private View loadingOverlay;
     private View firmwareContainer;
     private android.os.Handler statusRefreshHandler = new android.os.Handler();
+    private long correctedTempEventTimestamp = -1;
+    private long correctedCurrentTimestamp = -1;
     private static final int STATUS_REFRESH_INTERVAL = 1000;
     // Bluetooth state monitoring
     private BluetoothStateReceiver bluetoothStateReceiver;
     private AlertDialog bluetoothOffDialog;
 
     public static Intent newIntent(Context context, MST03Entity device, int batteryLevel, String firmwareVersion,
-            float currentTemperature) {
+            float currentTemperature, long correctedFirstExcursionTimestamp, long correctedCurrentTimestamp) {
         Intent intent = new Intent(context, DeviceDetailsActivity.class);
         intent.putExtra(EXTRA_DEVICE, device);
         intent.putExtra("battery_level", batteryLevel);
         intent.putExtra("firmware_version", firmwareVersion);
         intent.putExtra("current_temperature", currentTemperature);
+        intent.putExtra("corrected_first_excursion_timestamp", correctedFirstExcursionTimestamp);
+        intent.putExtra("corrected_current_timestamp", correctedCurrentTimestamp);
         return intent;
     }
 
@@ -82,6 +88,8 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         int batteryLevel = getIntent().getIntExtra("battery_level", -1);
         String firmwareVersion = getIntent().getStringExtra("firmware_version");
         float currentTemperature = getIntent().getFloatExtra("current_temperature", Float.NaN);
+        this.correctedTempEventTimestamp = getIntent().getLongExtra("corrected_temp_event_timestamp", -1);
+        this.correctedCurrentTimestamp = getIntent().getLongExtra("corrected_current_timestamp", -1);
         initViews();
         setupBackButton();
         setupGraph();
@@ -92,6 +100,16 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         showLoaderForConnectionData();
         loadCurrentTemperatureFromBeacon(currentTemperature);
         loadConnectionDataAsync();
+        
+        // Force test excursion duration calculation after a delay
+        new android.os.Handler().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                Log.d("DeviceDetails", "Forcing excursion duration calculation test after delay");
+                calculateAndDisplayExcursionDuration();
+            }
+        }, 3000); // 3 second delay
+        
         // Initialize Bluetooth state monitoring
         initBluetoothStateMonitoring();
     }
@@ -111,6 +129,8 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         tvBatteryLevel = findViewById(R.id.tv_battery_level);
         tvFirmwareVersion = findViewById(R.id.tv_firmware_version);
         tvExcursionEventAt = findViewById(R.id.tv_excursion_event_at);
+        tvMaxTemperatureTrip = findViewById(R.id.tv_max_temperature_trip);
+        tvExcursionDuration = findViewById(R.id.tv_excursion_duration);
         tvCurrentTemperature = findViewById(R.id.tv_current_temperature);
         lineChart = findViewById(R.id.graph_container);
         tvGraphPlaceholder = findViewById(R.id.tv_graph_placeholder);
@@ -215,45 +235,87 @@ public class DeviceDetailsActivity extends AppCompatActivity {
     }
 
     private void loadCurrentTemperatureFromBeacon(float fallbackTemperature) {
+        float temperature = Float.NaN;
+        boolean temperatureFound = false;
+        
+        // Strategy 1: Try to get temperature from connected beacon's CombinationFrame
         try {
-            CombinationFrame comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.CUSTOM_COMBINATION_FRAME);
-            if (comboFrame != null) {
-                float temperature = comboFrame.getTemperature();
-                if (!Float.isNaN(temperature) && temperature != 0.0f) {
-                    tvCurrentTemperature.setText(String.format("%.1f°C", temperature));
-                    if (temperature > 8.0f || temperature < 2.0f) {
-                        tvCurrentTemperature.setTextColor(getResources().getColor(R.color.error));
+            if (device != null) {
+                CombinationFrame comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.CUSTOM_COMBINATION_FRAME);
+                if (comboFrame != null) {
+                    temperature = comboFrame.getTemperature();
+                    if (!Float.isNaN(temperature) && temperature != 0.0f) {
+                        temperatureFound = true;
+                        Log.d("DeviceDetails", "Got temperature from CombinationFrame: " + temperature);
                     } else {
-                        tvCurrentTemperature.setTextColor(getResources().getColor(R.color.primary));
+                        Log.w("DeviceDetails", "Invalid temperature from CombinationFrame: " + temperature);
                     }
-                    return;
                 } else {
-                    Log.w("DeviceDetails", "Invalid temperature from connected beacon: " + temperature);
+                    Log.w("DeviceDetails", "No CombinationFrame available from connected beacon");
                 }
             } else {
-                Log.w("DeviceDetails", "No CombinationFrame available from connected beacon");
+                Log.w("DeviceDetails", "Device is null, cannot get CombinationFrame");
             }
         } catch (Exception e) {
-            Log.e("DeviceDetails", "Error fetching temperature from connected beacon: " + e.getMessage());
+            Log.e("DeviceDetails", "Error fetching temperature from CombinationFrame: " + e.getMessage());
         }
-        if (!Float.isNaN(fallbackTemperature) && fallbackTemperature != 0.0f) {
-            tvCurrentTemperature.setText(String.format("%.1f°C", fallbackTemperature));
-            if (fallbackTemperature > 8.0f || fallbackTemperature < 2.0f) {
+        
+        // Strategy 2: Try fallback temperature passed from intent
+        if (!temperatureFound && !Float.isNaN(fallbackTemperature) && fallbackTemperature != 0.0f) {
+            temperature = fallbackTemperature;
+            temperatureFound = true;
+            Log.d("DeviceDetails", "Using fallback temperature from intent: " + fallbackTemperature);
+        }
+        
+        // Strategy 3: Try cached temperature from scan activity
+        if (!temperatureFound) {
+            try {
+                if (ScanDevicesListActivity.getInstance() != null) {
+                    Float cachedTemperature = ScanDevicesListActivity.getInstance()
+                            .getCachedTemperature(device.getMacAddress());
+                    if (cachedTemperature != null && !Float.isNaN(cachedTemperature) && cachedTemperature != 0.0f) {
+                        temperature = cachedTemperature;
+                        temperatureFound = true;
+                        Log.d("DeviceDetails", "Using cached temperature: " + cachedTemperature);
+                    }
+                }
+            } catch (Exception e) {
+                Log.w("DeviceDetails", "Error getting cached temperature: " + e.getMessage());
+            }
+        }
+        
+        // Strategy 4: Try to get temperature from latest historical data
+        if (!temperatureFound) {
+            try {
+                List<HtData> historicalData = ScanDevicesListActivity.getCompleteHistoricalData();
+                if (historicalData != null && !historicalData.isEmpty()) {
+                    // Get the most recent temperature reading
+                    HtData latestData = historicalData.get(historicalData.size() - 1);
+                    float histTemp = latestData.getTemperature();
+                    if (!Float.isNaN(histTemp) && histTemp != 0.0f) {
+                        temperature = histTemp;
+                        temperatureFound = true;
+                        Log.d("DeviceDetails", "Using latest historical temperature: " + histTemp);
+                    }
+                }
+            } catch (Exception e) {
+                Log.w("DeviceDetails", "Error getting historical temperature: " + e.getMessage());
+            }
+        }
+        
+        // Display the temperature or show unavailable
+        if (temperatureFound) {
+            tvCurrentTemperature.setText(String.format("%.1f°C", temperature));
+            if (temperature > 8.0f || temperature < 2.0f) {
                 tvCurrentTemperature.setTextColor(getResources().getColor(R.color.error));
             } else {
                 tvCurrentTemperature.setTextColor(getResources().getColor(R.color.primary));
             }
+            Log.d("DeviceDetails", "Successfully loaded current temperature: " + temperature + "°C");
         } else {
-            Float cachedTemperature = ScanDevicesListActivity.getInstance()
-                    .getCachedTemperature(device.getMacAddress());
-            if (cachedTemperature != null) {
-                tvCurrentTemperature.setText(String.format("%.1f°C", cachedTemperature));
-                tvCurrentTemperature.setTextColor(getResources().getColor(R.color.text_secondary));
-            } else {
-                tvCurrentTemperature.setText("Temperature unavailable");
-                tvCurrentTemperature.setTextColor(getResources().getColor(R.color.text_secondary));
-                Log.w("DeviceDetails", "No temperature data available from any source");
-            }
+            tvCurrentTemperature.setText("Temperature unavailable");
+            tvCurrentTemperature.setTextColor(getResources().getColor(R.color.text_secondary));
+            Log.w("DeviceDetails", "No temperature data available from any source");
         }
     }
 
@@ -433,29 +495,54 @@ public class DeviceDetailsActivity extends AppCompatActivity {
                     break;
                 }
             }
+            // Use the corrected timestamps passed from the scanning screen
             long firstExcursionTimestamp = -1;
-            if (!hasNormalTemperature) {
-                if (!completeHistoricalData.isEmpty()) {
-                    firstExcursionTimestamp = completeHistoricalData.get(0).getTimestamps();
-                } else if (!historicalData.isEmpty()) {
-                    firstExcursionTimestamp = historicalData.get(0).getTimestamps();
+            
+            if (this.correctedTempEventTimestamp != -1) {
+                // Use the corrected tempEventTimestamp passed from scanning
+                firstExcursionTimestamp = this.correctedTempEventTimestamp * 1000; // Convert to milliseconds
+                Log.d("DeviceDetails", String.format("Using corrected tempEventTimestamp passed from scanning: %d -> %s", 
+                    this.correctedTempEventTimestamp, BeaconTimestampCorrector.timestampToHumanReadable(this.correctedTempEventTimestamp)));
+            } else {
+                // Fallback to processed data if corrected timestamp not available
+                if (!hasNormalTemperature) {
+                    if (!completeHistoricalData.isEmpty()) {
+                        firstExcursionTimestamp = completeHistoricalData.get(0).getTimestamps();
+                    } else if (!historicalData.isEmpty()) {
+                        firstExcursionTimestamp = historicalData.get(0).getTimestamps();
+                    }
+                } else if (excursionData != null && !excursionData.isEmpty()) {
+                    if (!excursionData.isEmpty()) {
+                        firstExcursionTimestamp = excursionData.get(0).getTimestamp();
+                    }
                 }
-            } else if (excursionData != null && !excursionData.isEmpty()) {
-                // The excursion data has already been filtered by the consecutive logic in ScanDevicesListActivity
-                // So we can trust that these are valid excursions
-                if (!excursionData.isEmpty()) {
-                    firstExcursionTimestamp = excursionData.get(0).getTimestamp();
-                }
-            }
-            if (firstExcursionTimestamp != -1) {
-                if (firstExcursionTimestamp < 10000000000L) {
+                
+                if (firstExcursionTimestamp != -1 && firstExcursionTimestamp < 10000000000L) {
                     firstExcursionTimestamp = firstExcursionTimestamp * 1000;
                 }
+                Log.d("DeviceDetails", "Using processed excursion data timestamp for excursion event time");
+            }
+            
+            if (firstExcursionTimestamp != -1) {
                 java.util.Date firstExcursionDate = new java.util.Date(firstExcursionTimestamp);
                 String formattedDate = getLocaleAwareDateTimeFormat().format(firstExcursionDate);
                 tvExcursionEventAt.setText(formattedDate);
+                
+                // Calculate and display max temperature during the trip
+                calculateAndDisplayMaxTemperature();
+                
+                // Calculate and display excursion duration
+                Log.d("DeviceDetails", "About to call calculateAndDisplayExcursionDuration()");
+                calculateAndDisplayExcursionDuration();
             } else {
+                Log.d("DeviceDetails", "No excursion data found, setting duration to --");
                 tvExcursionEventAt.setText("No excursion data");
+                tvMaxTemperatureTrip.setText("--");
+                tvExcursionDuration.setText("--");
+                
+                // Force test the excursion duration calculation
+                Log.d("DeviceDetails", "Forcing excursion duration calculation test");
+                calculateAndDisplayExcursionDuration();
             }
             updateStatisticsFromProcessedData(historicalData, excursionData);
             updateGraph();
@@ -944,5 +1031,297 @@ public class DeviceDetailsActivity extends AppCompatActivity {
         } catch (Exception e) {
             Log.e("DeviceDetails", "Error showing Bluetooth dialog: " + e.getMessage(), e);
         }
+    }
+    
+    /**
+     * Calculate and display the maximum temperature during the trip period
+     * (between tempEventTimestamp and currentTime from beacon data)
+     */
+    private void calculateAndDisplayMaxTemperature() {
+        try {
+            // Check if device is available
+            if (device == null) {
+                Log.w("DeviceDetails", "Device is null for max temperature calculation");
+                calculateMaxTemperatureFallback();
+                return;
+            }
+            
+            // Get beacon data to access tempEventTimestamp and currentTime
+            CombinationFrame comboFrame = null;
+            try {
+                comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.CUSTOM_COMBINATION_FRAME);
+            } catch (Exception e) {
+                Log.e("DeviceDetails", "Error getting CombinationFrame for max temperature: " + e.getMessage(), e);
+                calculateMaxTemperatureFallback();
+                return;
+            }
+            
+            if (comboFrame == null) {
+                Log.w("DeviceDetails", "No CombinationFrame available, trying fallback calculation");
+                calculateMaxTemperatureFallback();
+                return;
+            }
+            
+            long tempEventTimestamp = comboFrame.getTempEventTimestamp();
+            long currentTime = comboFrame.getCurrentTimestamp();
+            float currentTemperature = comboFrame.getTemperature();
+            
+            // Correct the timestamp to current system time
+            long correctedTempEventTimestamp = BeaconTimestampCorrector.correctBeaconTimestamp(tempEventTimestamp, currentTime);
+            
+            // Log raw tempEventTimestamp as simple message
+            Log.d("DeviceDetails", String.format("tempEventTimestamp: %d", tempEventTimestamp));
+            Log.d("DeviceDetails", String.format("CORRECTED tempEventTimestamp: %d -> %s", 
+                tempEventTimestamp, BeaconTimestampCorrector.timestampToHumanReadable(correctedTempEventTimestamp)));
+            
+            Log.d("DeviceDetails", String.format("Beacon data - tempEvent: %d, currentTime: %d, currentTemp: %.2f°C", 
+                tempEventTimestamp, currentTime, currentTemperature));
+            
+            // Get historical data to find max temperature
+            List<HtData> historicalData = ScanDevicesListActivity.getCompleteHistoricalData();
+            if (historicalData == null || historicalData.isEmpty()) {
+                Log.w("DeviceDetails", "No historical data available, using current temperature from beacon");
+                if (!Float.isNaN(currentTemperature) && currentTemperature != 0.0f) {
+                    tvMaxTemperatureTrip.setText(String.format("%.1f°C", currentTemperature));
+                } else {
+                    calculateMaxTemperatureFallback();
+                }
+                return;
+            }
+            
+            // Strategy 1: Try to find max temperature within specific time range (if timestamps are meaningful)
+            boolean foundDataInRange = false;
+            float maxTemperature = Float.MIN_VALUE;
+            
+            if (tempEventTimestamp > 0 && currentTime > tempEventTimestamp) {
+                // Convert beacon timestamps to wall-clock time
+                long tempEventWallClock = alignBeaconTimestampToWallClock(tempEventTimestamp, currentTime);
+                long currentTimeWallClock = System.currentTimeMillis();
+                
+                Log.d("DeviceDetails", String.format("Looking for data between %d (%s) and %d (%s)", 
+                    tempEventWallClock, new java.util.Date(tempEventWallClock), 
+                    currentTimeWallClock, new java.util.Date(currentTimeWallClock)));
+                
+                for (HtData htData : historicalData) {
+                    long dataTimestamp = htData.getTimestamps();
+                    // Normalize timestamp to milliseconds if needed
+                    if (dataTimestamp < 10000000000L) {
+                        dataTimestamp = dataTimestamp * 1000;
+                    }
+                    
+                    // Check if this data point is within our time range
+                    if (dataTimestamp >= tempEventWallClock && dataTimestamp <= currentTimeWallClock) {
+                        float temperature = htData.getTemperature();
+                        maxTemperature = Math.max(maxTemperature, temperature);
+                        foundDataInRange = true;
+                    }
+                }
+            }
+            
+            // Strategy 2: If no data found in specific range, use all available historical data
+            if (!foundDataInRange) {
+                Log.d("DeviceDetails", "No data in specific time range, using all historical data");
+                for (HtData htData : historicalData) {
+                    float temperature = htData.getTemperature();
+                    maxTemperature = Math.max(maxTemperature, temperature);
+                    foundDataInRange = true;
+                }
+            }
+            
+            // Strategy 3: Include current beacon temperature as well
+            if (!Float.isNaN(currentTemperature) && currentTemperature != 0.0f) {
+                maxTemperature = Math.max(maxTemperature, currentTemperature);
+                foundDataInRange = true;
+                Log.d("DeviceDetails", "Including current beacon temperature: " + currentTemperature);
+            }
+            
+            if (foundDataInRange) {
+                String maxTempText = String.format("%.1f°C", maxTemperature);
+                tvMaxTemperatureTrip.setText(maxTempText);
+                Log.d("DeviceDetails", "Max temperature calculated: " + maxTempText);
+            } else {
+                calculateMaxTemperatureFallback();
+            }
+            
+        } catch (Exception e) {
+            Log.e("DeviceDetails", "Error calculating max temperature: " + e.getMessage(), e);
+            calculateMaxTemperatureFallback();
+        }
+    }
+    
+    /**
+     * Fallback method to calculate max temperature when primary method fails
+     */
+    private void calculateMaxTemperatureFallback() {
+        try {
+            Log.d("DeviceDetails", "Using fallback max temperature calculation");
+            
+            // Try to get current temperature from any available source
+            float fallbackTemp = Float.MIN_VALUE;
+            boolean foundTemp = false;
+            
+            // Source 1: Current beacon temperature
+            try {
+                if (device != null) {
+                    CombinationFrame comboFrame = (CombinationFrame) device.getMinewFrame(FrameType.CUSTOM_COMBINATION_FRAME);
+                    if (comboFrame != null) {
+                        float currentTemp = comboFrame.getTemperature();
+                        if (!Float.isNaN(currentTemp) && currentTemp != 0.0f) {
+                            fallbackTemp = Math.max(fallbackTemp, currentTemp);
+                            foundTemp = true;
+                            Log.d("DeviceDetails", "Found current temp from beacon: " + currentTemp);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                Log.w("DeviceDetails", "Could not get current temp from beacon: " + e.getMessage());
+            }
+            
+            // Source 2: Cached temperature
+            try {
+                if (ScanDevicesListActivity.getInstance() != null) {
+                    Float cachedTemp = ScanDevicesListActivity.getInstance().getCachedTemperature(device.getMacAddress());
+                    if (cachedTemp != null && !Float.isNaN(cachedTemp) && cachedTemp != 0.0f) {
+                        fallbackTemp = Math.max(fallbackTemp, cachedTemp);
+                        foundTemp = true;
+                        Log.d("DeviceDetails", "Found cached temp: " + cachedTemp);
+                    }
+                }
+            } catch (Exception e) {
+                Log.w("DeviceDetails", "Could not get cached temp: " + e.getMessage());
+            }
+            
+            // Source 3: Any available historical data
+            try {
+                List<HtData> historicalData = ScanDevicesListActivity.getCompleteHistoricalData();
+                if (historicalData != null && !historicalData.isEmpty()) {
+                    for (HtData htData : historicalData) {
+                        float temp = htData.getTemperature();
+                        if (!Float.isNaN(temp) && temp != 0.0f) {
+                            fallbackTemp = Math.max(fallbackTemp, temp);
+                            foundTemp = true;
+                        }
+                    }
+                    Log.d("DeviceDetails", "Found max temp from historical data: " + fallbackTemp);
+                }
+            } catch (Exception e) {
+                Log.w("DeviceDetails", "Could not get historical data: " + e.getMessage());
+            }
+            
+            if (foundTemp) {
+                String maxTempText = String.format("%.1f°C", fallbackTemp);
+                tvMaxTemperatureTrip.setText(maxTempText);
+                Log.d("DeviceDetails", "Fallback max temperature: " + maxTempText);
+            } else {
+                tvMaxTemperatureTrip.setText("--");
+                Log.w("DeviceDetails", "No temperature data available from any source");
+            }
+            
+        } catch (Exception e) {
+            Log.e("DeviceDetails", "Error in fallback calculation: " + e.getMessage(), e);
+            tvMaxTemperatureTrip.setText("--");
+        }
+    }
+    
+    /**
+     * Calculate and display the excursion duration from excursion event timestamp to current time
+     */
+    private void calculateAndDisplayExcursionDuration() {
+        Log.d("DeviceDetails", "=== Starting excursion duration calculation ===");
+        
+        // Use the corrected tempEventTimestamp passed from the scanning screen
+        long excursionEventTimestamp = -1;
+        
+        if (this.correctedTempEventTimestamp != -1) {
+            // Use the corrected tempEventTimestamp passed from scanning
+            excursionEventTimestamp = this.correctedTempEventTimestamp * 1000; // Convert to milliseconds
+            Log.d("DeviceDetails", String.format("Using corrected tempEventTimestamp passed from scanning for duration: %d -> %s", 
+                this.correctedTempEventTimestamp, BeaconTimestampCorrector.timestampToHumanReadable(this.correctedTempEventTimestamp)));
+        } else {
+            // Fallback to processed data if corrected timestamp not available
+            List<ExcursionData> excursionData = ScanDevicesListActivity.getProcessedExcursionData();
+            if (excursionData != null && !excursionData.isEmpty()) {
+                excursionEventTimestamp = excursionData.get(0).getTimestamp();
+                Log.d("DeviceDetails", "Got excursion timestamp from processed data: " + excursionEventTimestamp);
+            }
+        }
+        
+        if (excursionEventTimestamp == -1) {
+            Log.w("DeviceDetails", "No excursion event timestamp found");
+            tvExcursionDuration.setText("--");
+            return;
+        }
+        
+        // Calculate duration from excursion event to current time
+        long currentTime = System.currentTimeMillis();
+        long durationMs = currentTime - excursionEventTimestamp;
+        
+        Log.d("DeviceDetails", String.format("Duration calculation - excursionEvent: %d (%s), currentTime: %d (%s), durationMs: %d", 
+            excursionEventTimestamp, new java.util.Date(excursionEventTimestamp), 
+            currentTime, new java.util.Date(currentTime), durationMs));
+        
+        if (durationMs < 0) {
+            Log.w("DeviceDetails", "Negative duration calculated, using absolute value");
+            durationMs = Math.abs(durationMs);
+        }
+        
+        // Convert to human-readable format
+        String durationText = formatDuration(durationMs);
+        
+        tvExcursionDuration.setText(durationText);
+        Log.d("DeviceDetails", "Excursion duration calculated successfully: " + durationText + " (" + durationMs + " ms)");
+        Log.d("DeviceDetails", "=== Excursion duration calculation completed ===");
+    }
+    
+
+    
+    /**
+     * Format duration in milliseconds to human-readable string
+     */
+    private String formatDuration(long durationMs) {
+        if (durationMs < 1000) {
+            return durationMs + " ms";
+        }
+        
+        long seconds = durationMs / 1000;
+        if (seconds < 60) {
+            return seconds + " sec";
+        }
+        
+        long minutes = seconds / 60;
+        seconds = seconds % 60;
+        if (minutes < 60) {
+            return minutes + "m " + seconds + "s";
+        }
+        
+        long hours = minutes / 60;
+        minutes = minutes % 60;
+        if (hours < 24) {
+            return hours + "h " + minutes + "m";
+        }
+        
+        long days = hours / 24;
+        hours = hours % 24;
+        return days + "d " + hours + "h";
+    }
+    
+    /**
+     * Converts a beacon event timestamp to wall-clock using the beacon's currentTimestamp as reference.
+     * This method is copied from ScanDevicesListActivity for consistency.
+     */
+    private long alignBeaconTimestampToWallClock(long beaconEventTimestamp, long beaconCurrentTimestamp) {
+        long diffRaw = Math.abs(beaconCurrentTimestamp - beaconEventTimestamp);
+        long nowMs = System.currentTimeMillis();
+        long candidateMs = nowMs - diffRaw;            // assume diff is already in ms
+        long candidateSec = nowMs - diffRaw * 1000L;   // assume diff is in seconds
+        long twoYearsMs = 730L * 24 * 60 * 60 * 1000;  // 2 years
+        long lowerBound = nowMs - twoYearsMs;
+        boolean aOk = candidateMs <= nowMs && candidateMs >= lowerBound;
+        boolean bOk = candidateSec <= nowMs && candidateSec >= lowerBound;
+        if (aOk && !bOk) return candidateMs;
+        if (bOk && !aOk) return candidateSec;
+        // Heuristic: small diffs (< 1,000,000) are likely seconds; larger diffs likely milliseconds
+        if (diffRaw < 1_000_000L) return candidateSec;
+        return candidateMs;
     }
 }
