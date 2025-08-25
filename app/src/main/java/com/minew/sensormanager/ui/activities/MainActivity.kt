@@ -1,6 +1,5 @@
 package com.minew.sensormanager.ui.activities
 
-import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.os.Bundle
@@ -9,13 +8,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.bottomnavigation.BottomNavigationView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.minew.sensormanager.R
 import com.minew.sensormanager.databinding.ActivityMainBinding
-import com.minew.sensormanager.ui.fragments.DeviceListFragment
-import com.minew.sensormanager.ui.fragments.RealTimeDataFragment
-import com.minew.sensormanager.ui.fragments.HistoryChartFragment
-import com.minew.sensormanager.ui.fragments.AlertsFragment
 import com.minew.sensormanager.ui.viewmodels.MainViewModel
 import com.minew.sensormanager.utils.PermissionHelper
 import com.minew.sensormanager.utils.BluetoothHelper
@@ -43,47 +39,15 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        // Force dark status bar icons on light background across APIs
+        WindowCompat.setDecorFitsSystemWindows(window, true)
+        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = true
         
-        setupBottomNavigation()
         checkBluetoothAndPermissions()
         observeViewModel()
     }
     
-    private fun setupBottomNavigation() {
-        binding.bottomNavigation.setOnItemSelectedListener { item ->
-            when (item.itemId) {
-                R.id.nav_devices -> {
-                    showFragment(DeviceListFragment())
-                    true
-                }
-                R.id.nav_realtime -> {
-                    showFragment(RealTimeDataFragment())
-                    true
-                }
-                R.id.nav_history -> {
-                    showFragment(HistoryChartFragment())
-                    true
-                }
-                R.id.nav_alerts -> {
-                    showFragment(AlertsFragment())
-                    true
-                }
-                else -> false
-            }
-        }
-        
-        // Show default fragment
-        binding.bottomNavigation.selectedItemId = R.id.nav_devices
-    }
-    
-    private fun showFragment(fragment: androidx.fragment.app.Fragment) {
-        supportFragmentManager.beginTransaction()
-            .replace(R.id.fragment_container, fragment)
-            .commit()
-    }
-    
     private fun checkBluetoothAndPermissions() {
-        // First request permissions, then check Bluetooth
         checkPermissionsAndStartApp()
     }
     
@@ -93,22 +57,6 @@ class MainActivity : AppCompatActivity() {
         PermissionX.init(this)
             .permissions(permissions)
             .explainReasonBeforeRequest()
-            .onExplainRequestReason { scope, deniedList ->
-                scope.showRequestReasonDialog(
-                    deniedList,
-                    "These permissions are required for Bluetooth scanning and device management",
-                    "Grant Permissions",
-                    "Cancel"
-                )
-            }
-            .onForwardToSettings { scope, deniedList ->
-                scope.showForwardToSettingsDialog(
-                    deniedList,
-                    "Please grant the required permissions in Settings to use this app",
-                    "Go to Settings",
-                    "Cancel"
-                )
-            }
             .request { allGranted, _, _ ->
                 if (allGranted) {
                     checkBluetoothAfterPermissions()
@@ -136,9 +84,12 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun initializeApp() {
-        // Start background services
         lifecycleScope.launch {
             viewModel.initializeApp()
+            // Navigate to the Scan screen after initialization
+            startActivity(Intent(this@MainActivity, ScanActivity::class.java))
+            // Optionally finish MainActivity to avoid back stack white screen
+            finish()
         }
     }
     
@@ -148,12 +99,6 @@ class MainActivity : AppCompatActivity() {
                 showError(it)
                 viewModel.clearError()
             }
-        }
-        
-        viewModel.isLoading.observe(this) { isLoading ->
-            // Show/hide loading indicator
-            binding.progressBar.visibility = if (isLoading) 
-                android.view.View.VISIBLE else android.view.View.GONE
         }
     }
     
@@ -171,7 +116,6 @@ class MainActivity : AppCompatActivity() {
     
     override fun onDestroy() {
         super.onDestroy()
-        // Clean up resources
         lifecycleScope.launch {
             viewModel.cleanup()
         }

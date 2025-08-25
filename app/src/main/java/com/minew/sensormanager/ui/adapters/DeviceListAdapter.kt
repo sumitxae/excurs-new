@@ -1,30 +1,34 @@
 package com.minew.sensormanager.ui.adapters
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.minew.sensormanager.BuildConfig
 import com.minew.sensormanager.R
-import com.minew.sensormanager.data.models.DeviceInfo
 import com.minew.sensormanager.data.models.ConnectionState
-import com.minew.sensormanager.databinding.ItemDeviceBinding
+import com.minew.sensormanager.data.models.DeviceInfo
+import com.minew.sensormanager.databinding.ItemScanDeviceBinding
 
 class DeviceListAdapter(
-    private val onDeviceClick: (DeviceInfo) -> Unit,
-    private val onConnectClick: (DeviceInfo) -> Unit,
-    private val onDisconnectClick: (DeviceInfo) -> Unit
+        private val onDeviceClick: (DeviceInfo) -> Unit,
+        private val onConnectClick: (DeviceInfo) -> Unit,
+        private val onDisconnectClick: (DeviceInfo) -> Unit
 ) : ListAdapter<DeviceInfo, DeviceListAdapter.DeviceViewHolder>(DeviceDiffCallback()) {
 
     private val connectionStates = mutableMapOf<String, ConnectionState>()
     private val expandedItems = mutableSetOf<String>()
 
+    init {
+        setHasStableIds(true)
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): DeviceViewHolder {
-        val binding = ItemDeviceBinding.inflate(
-            LayoutInflater.from(parent.context),
-            parent,
-            false
-        )
+        val binding =
+                ItemScanDeviceBinding.inflate(LayoutInflater.from(parent.context), parent, false)
         return DeviceViewHolder(binding)
     }
 
@@ -32,143 +36,105 @@ class DeviceListAdapter(
         holder.bind(getItem(position))
     }
 
+    override fun getItemId(position: Int): Long {
+        // Use a stable hash from MAC address to minimize view rebinding artifacts
+        return getItem(position).macAddress.hashCode().toLong()
+    }
+
     fun updateConnectionStates(states: Map<String, ConnectionState>) {
         connectionStates.clear()
         connectionStates.putAll(states)
         notifyDataSetChanged()
     }
-    
+
     fun updateDevices(devices: List<DeviceInfo>) {
         submitList(devices)
     }
 
-    inner class DeviceViewHolder(
-        private val binding: ItemDeviceBinding
-    ) : RecyclerView.ViewHolder(binding.root) {
+    inner class DeviceViewHolder(private val binding: ItemScanDeviceBinding) :
+            RecyclerView.ViewHolder(binding.root) {
 
         fun bind(device: DeviceInfo) {
             binding.apply {
-                textDeviceName.text = device.name
-                textMacAddress.text = device.macAddress
-                textRssi.text = "RSSI: ${device.rssi} dBm"
-                textBattery.text = "Battery: ${device.battery}%"
-                
-                // Display temperature if available
-                device.temperature?.let { temp ->
-                    textTemperature.text = "${String.format("%.1f", temp)}°C"
-                    textTemperature.visibility = android.view.View.VISIBLE
-                } ?: run {
-                    textTemperature.visibility = android.view.View.GONE
-                }
+                tvScanDeviceName.text = device.macAddress
+                tvSensorType.text = "Temperature Sensor"
+                tvScanDeviceHt.text =
+                        device.temperature?.let { t -> "${String.format("%.1f", t)}°C" } ?: "--"
 
                 val connectionState = connectionStates[device.macAddress] ?: device.connectionState
                 updateConnectionStatus(connectionState)
 
-                // Handle expandable details
-                val isExpanded = expandedItems.contains(device.macAddress)
-                layoutDetails.visibility = if (isExpanded) android.view.View.VISIBLE else android.view.View.GONE
+                // Show Connect button only when device is in excursion state (2°C <= temp <= 8°C)
+                val tempValue = device.temperature
+                val isInExcursionState = tempValue != null && !tempValue.isNaN() && 
+                    (tempValue > 8.0f || tempValue < 2.0f)
                 
-                // Display frame data if available
-                device.staticFrameData?.let { data ->
-                    textStaticFrameData.text = data
-                    textStaticFrameData.visibility = android.view.View.VISIBLE
-                } ?: run {
-                    textStaticFrameData.visibility = android.view.View.GONE
-                }
-                
-                device.combinationFrameData?.let { data ->
-                    textCombinationFrameData.text = data
-                    textCombinationFrameData.visibility = android.view.View.VISIBLE
-                } ?: run {
-                    textCombinationFrameData.visibility = android.view.View.GONE
-                }
-
-                buttonConnect.setOnClickListener {
-                    if (connectionState == ConnectionState.READY) {
-                        onDisconnectClick(device)
-                    } else {
+                if (isInExcursionState) {
+                    btnConnect.visibility = View.VISIBLE
+                    btnConnect.text = "Connect"
+                    btnConnect.setOnClickListener {
                         onConnectClick(device)
                     }
+                } else {
+                    btnConnect.visibility = View.GONE
                 }
 
-                root.setOnClickListener {
-                    toggleExpansion(device.macAddress)
-                }
-                
-                // Add long click to open device details
+                // Tap card to toggle frame info expansion; long-press preserves external click
+                // behavior
+                root.setOnClickListener { toggleExpansion(device.macAddress, adapterPosition) }
                 root.setOnLongClickListener {
                     onDeviceClick(device)
                     true
                 }
+
+                // Frame display controlled by BuildConfig flag
+                val frameView = root.findViewById<TextView>(R.id.tv_frame_info)
+                if (frameView != null) {
+                    val isExpanded = expandedItems.contains(device.macAddress)
+                    if (BuildConfig.SHOW_FRAMES_IN_SCAN && isExpanded) {
+                        frameView.visibility = View.VISIBLE
+                        val parts = mutableListOf<String>()
+                        device.staticFrameData?.let { parts.add(it) }
+                        device.combinationFrameData?.let { parts.add(it) }
+                        frameView.text = parts.joinToString("\n\n")
+                    } else {
+                        frameView.visibility = View.GONE
+                        frameView.text = ""
+                    }
+                }
             }
         }
-        
-        private fun toggleExpansion(macAddress: String) {
+
+        private fun toggleExpansion(macAddress: String, position: Int) {
             if (expandedItems.contains(macAddress)) {
                 expandedItems.remove(macAddress)
             } else {
                 expandedItems.add(macAddress)
             }
-            notifyDataSetChanged()
+            if (position != RecyclerView.NO_POSITION) {
+                notifyItemChanged(position)
+            } else {
+                notifyDataSetChanged()
+            }
         }
 
         private fun updateConnectionStatus(state: ConnectionState) {
-            binding.apply {
-                when (state) {
-                    ConnectionState.READY -> {
-                        textConnectionStatus.text = "Connected"
-                        textConnectionStatus.setTextColor(
-                            root.context.getColor(R.color.status_connected)
-                        )
-                        buttonConnect.text = "Disconnect"
-                    }
-                    ConnectionState.CONNECTING -> {
-                        textConnectionStatus.text = "Connecting"
-                        textConnectionStatus.setTextColor(
-                            root.context.getColor(R.color.status_connecting)
-                        )
-                        buttonConnect.text = "Connecting"
-                        buttonConnect.isEnabled = false
-                    }
-                    ConnectionState.CONNECTED -> {
-                        textConnectionStatus.text = "Connected"
-                        textConnectionStatus.setTextColor(
-                            root.context.getColor(R.color.status_connected)
-                        )
-                        buttonConnect.text = "Disconnect"
-                    }
-                    ConnectionState.AUTHENTICATING -> {
-                        textConnectionStatus.text = "Authenticating"
-                        textConnectionStatus.setTextColor(
-                            root.context.getColor(R.color.status_connecting)
-                        )
-                        buttonConnect.text = "Authenticating"
-                        buttonConnect.isEnabled = false
-                    }
-                    ConnectionState.AUTHENTICATED -> {
-                        textConnectionStatus.text = "Authenticated"
-                        textConnectionStatus.setTextColor(
-                            root.context.getColor(R.color.status_connecting)
-                        )
-                        buttonConnect.text = "Disconnect"
-                    }
-                    ConnectionState.ERROR -> {
-                        textConnectionStatus.text = "Error"
-                        textConnectionStatus.setTextColor(
-                            root.context.getColor(R.color.status_error)
-                        )
-                        buttonConnect.text = "Connect"
-                        buttonConnect.isEnabled = true
-                    }
-                    else -> {
-                        textConnectionStatus.text = "Disconnected"
-                        textConnectionStatus.setTextColor(
-                            root.context.getColor(R.color.status_disconnected)
-                        )
-                        buttonConnect.text = "Connect"
-                        buttonConnect.isEnabled = true
-                    }
+            // First check temperature-based status
+            val tempValue = getItem(adapterPosition).temperature
+            if (tempValue != null && !tempValue.isNaN()) {
+                if (tempValue > 8.0f || tempValue < 2.0f) {
+                    binding.tvStatusBadge.text = "ALERT"
+                    binding.tvStatusBadge.setTextColor(android.graphics.Color.parseColor("#FF4B4B"))
+                    binding.tvStatusBadge.setBackgroundResource(R.drawable.bg_status_badge_alert)
+                } else if (tempValue <= 8.0f && tempValue >= 2.0f) {
+                    binding.tvStatusBadge.text = "NORMAL"
+                    binding.tvStatusBadge.setTextColor(android.graphics.Color.parseColor("#1BC47D"))
+                    binding.tvStatusBadge.setBackgroundResource(R.drawable.bg_status_badge_normal)
                 }
+            } else {
+                binding.tvStatusBadge.text = "N/A"
+                binding.tvStatusBadge.setTextColor(android.graphics.Color.parseColor("#D94F24"))
+                binding.tvStatusBadge.setBackgroundResource(R.drawable.bg_status_badge_alert)
             }
         }
     }

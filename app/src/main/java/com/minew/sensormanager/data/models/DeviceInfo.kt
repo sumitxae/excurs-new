@@ -17,7 +17,9 @@ data class DeviceInfo(
     val alertsEnabled: Boolean = true,
     val groupId: String? = null,
     val staticFrameData: String? = null,
-    val combinationFrameData: String? = null
+    val combinationFrameData: String? = null,
+    val tempEventTimestamp: Long? = null,
+    val currentTimestamp: Long? = null
 ) : Parcelable
 
 enum class ConnectionState {

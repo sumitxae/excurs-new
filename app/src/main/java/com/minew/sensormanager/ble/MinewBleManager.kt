@@ -3,6 +3,7 @@ package com.minew.sensormanager.ble
 import android.content.Context
 import android.util.Log
 import com.minew.sensormanager.data.models.*
+import com.minew.sensormanager.utils.TimestampConverter
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +29,7 @@ import com.minew.ble.mst03.frames.CombinationFrame
 import com.minew.ble.mst03.frames.DeviceStaticInfoFrame
 import com.minew.ble.mst03.interfaces.OnReceiveDataListener
 import com.minew.sensormanager.utils.PermissionHelper
+import com.minew.sensormanager.utils.BluetoothHelper
 
 @Singleton
 class MinewBleManager @Inject constructor() {
@@ -149,11 +151,11 @@ class MinewBleManager @Inject constructor() {
                         ConnectionState.AUTHENTICATED
                     }
                     BleConnectionState.AuthenticateFail -> {
-                        Log.e(TAG, "Device $macAddress authentication failed")
+                        Log.e(TAG, "Device $macAddress authentication failed - check secret key")
                         ConnectionState.ERROR
                     }
                     BleConnectionState.ConnectComplete -> {
-                        Log.d(TAG, "Device $macAddress connection complete")
+                        Log.d(TAG, "Device $macAddress connection complete - READY state")
                         ConnectionState.READY
                     }
                     BleConnectionState.Disconnect -> {
@@ -166,7 +168,35 @@ class MinewBleManager @Inject constructor() {
                     }
                 }
                 
+                Log.d(TAG, "Updating connection state for $macAddress: $state")
                 updateConnectionState(macAddress, state)
+                
+                // Log all current connection states for debugging
+                Log.d(TAG, "All connection states after update: ${_connectionStates.value}")
+                
+                // Additional error handling for specific failure cases
+                when (connectionState) {
+                    BleConnectionState.AuthenticateFail -> {
+                        Log.e(TAG, "Authentication failed for $macAddress. Possible causes:")
+                        Log.e(TAG, "1. Incorrect secret key")
+                        Log.e(TAG, "2. Device is already connected to another app")
+                        Log.e(TAG, "3. Device is out of range")
+                        Log.e(TAG, "4. Device firmware issue")
+                    }
+                    BleConnectionState.Disconnect -> {
+                        Log.e(TAG, "Connection failed for $macAddress. Possible causes:")
+                        Log.e(TAG, "1. Device is out of range")
+                        Log.e(TAG, "2. Device is already connected")
+                        Log.e(TAG, "3. Bluetooth is disabled")
+                        Log.e(TAG, "4. Insufficient permissions")
+                    }
+                    else -> {
+                        Log.e(TAG, "Connection issue for $macAddress. Possible causes:")
+                        Log.e(TAG, "1. Device is too far away")
+                        Log.e(TAG, "2. Device is busy or not responding")
+                        Log.e(TAG, "3. Bluetooth interference")
+                    }
+                }
             }
             Log.d(TAG, "Connection listener setup complete")
         } catch (e: Exception) {
@@ -270,7 +300,9 @@ class MinewBleManager @Inject constructor() {
                 isConnected = _connectionStates.value[macAddress] == ConnectionState.READY,
                 lastSeen = System.currentTimeMillis(),
                 staticFrameData = staticFrameData,
-                combinationFrameData = combinationFrameData
+                combinationFrameData = combinationFrameData,
+                tempEventTimestamp = combinationFrame?.tempEventTimestamp,
+                currentTimestamp = combinationFrame?.currentTimestamp
             )
             
             // Process real-time sensor data if available
@@ -304,6 +336,14 @@ class MinewBleManager @Inject constructor() {
             // Check permissions if context is provided
             if (context != null && !hasRequiredPermissions(context)) {
                 Log.e(TAG, "Required permissions not granted for BLE connection")
+                updateConnectionState(macAddress, ConnectionState.ERROR)
+                return false
+            }
+            
+            // Check if Bluetooth is enabled
+            if (context != null && !BluetoothHelper.isBluetoothEnabled(context)) {
+                Log.e(TAG, "Bluetooth is not enabled")
+                updateConnectionState(macAddress, ConnectionState.ERROR)
                 return false
             }
             
@@ -311,46 +351,146 @@ class MinewBleManager @Inject constructor() {
             if (_isScanning.value && context != null) {
                 Log.d(TAG, "Stopping scan before connection")
                 stopScan(context)
+                // Add a small delay to ensure scan is fully stopped
+                delay(500)
             }
             
-            // Set secret key first
-            Log.d(TAG, "Setting secret key for $macAddress")
-            try {
-                mst03Manager.setSecretKey(macAddress, secretKey)
-                Log.d(TAG, "Secret key set successfully")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error setting secret key", e)
+            // Check if device is already connected
+            if (_connectionStates.value[macAddress] == ConnectionState.READY) {
+                Log.d(TAG, "Device $macAddress is already connected")
+                return true
             }
+            
+            // Set initial connection state
+            updateConnectionState(macAddress, ConnectionState.CONNECTING)
+            
+            // Set secret key first with retry mechanism
+            Log.d(TAG, "Setting secret key for $macAddress")
+            var secretKeySet = false
+            for (attempt in 1..3) {
+                try {
+                    mst03Manager.setSecretKey(macAddress, secretKey)
+                    Log.d(TAG, "Secret key set successfully on attempt $attempt")
+                    secretKeySet = true
+                    break
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to set secret key on attempt $attempt", e)
+                    if (attempt < 3) {
+                        delay(200L * attempt) // Exponential backoff
+                    }
+                }
+            }
+            
+            if (!secretKeySet) {
+                Log.e(TAG, "Failed to set secret key after 3 attempts")
+                updateConnectionState(macAddress, ConnectionState.ERROR)
+                return false
+            }
+            
             connectedDevices[macAddress] = secretKey
             
-            // Try connecting directly
+            // Small delay to ensure secret key is properly applied
+            delay(200)
+            
+            // Try connecting with retry mechanism
             if (context != null) {
-                Log.d(TAG, "Attempting direct connection to $macAddress")
-                try {
-                    mst03Manager.connect(context, macAddress)
-                    Log.d(TAG, "Connect method called successfully")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error calling connect method", e)
-                    return false
+                Log.d(TAG, "Attempting connection to $macAddress")
+                var connectionAttempts = 0
+                val maxConnectionAttempts = 3
+                
+                while (connectionAttempts < maxConnectionAttempts) {
+                    connectionAttempts++
+                    Log.d(TAG, "Connection attempt $connectionAttempts of $maxConnectionAttempts")
+                    
+                    try {
+                        mst03Manager.connect(context, macAddress)
+                        Log.d(TAG, "Connect method called successfully")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error calling connect method on attempt $connectionAttempts", e)
+                        if (connectionAttempts >= maxConnectionAttempts) {
+                            updateConnectionState(macAddress, ConnectionState.ERROR)
+                            return false
+                        }
+                        delay(1000) // Wait before retry
+                        continue
+                    }
+                    
+                    // Wait for connection to establish with timeout
+                    Log.d(TAG, "Waiting for connection to establish...")
+                    val maxWaitTime = 20000L // 20 seconds timeout (reduced from 30)
+                    val startTime = System.currentTimeMillis()
+                    
+                    while (System.currentTimeMillis() - startTime < maxWaitTime) {
+                        val currentState = _connectionStates.value[macAddress]
+                        Log.d(TAG, "Current connection state: $currentState")
+                        
+                        when (currentState) {
+                            ConnectionState.READY -> {
+                                Log.d(TAG, "Connection successful to $macAddress - READY state reached")
+                                return true
+                            }
+                            ConnectionState.ERROR -> {
+                                Log.w(TAG, "Connection failed to $macAddress - ERROR state")
+                                if (connectionAttempts >= maxConnectionAttempts) {
+                                    return false
+                                }
+                                break // Try next attempt
+                            }
+                            ConnectionState.DISCONNECTED -> {
+                                Log.w(TAG, "Connection failed to $macAddress - DISCONNECTED state")
+                                if (connectionAttempts >= maxConnectionAttempts) {
+                                    return false
+                                }
+                                break // Try next attempt
+                            }
+                            ConnectionState.AUTHENTICATED -> {
+                                Log.d(TAG, "Device authenticated, waiting for READY state...")
+                                delay(500)
+                            }
+                            ConnectionState.CONNECTED -> {
+                                Log.d(TAG, "Device connected, waiting for authentication...")
+                                delay(500)
+                            }
+                            ConnectionState.CONNECTING -> {
+                                Log.d(TAG, "Device connecting...")
+                                delay(500)
+                            }
+                            ConnectionState.AUTHENTICATING -> {
+                                Log.d(TAG, "Device authenticating...")
+                                delay(500)
+                            }
+                            null -> {
+                                Log.d(TAG, "No connection state yet, continuing to wait...")
+                                delay(500)
+                            }
+                        }
+                    }
+                    
+                    // Check one final time after timeout
+                    val finalState = _connectionStates.value[macAddress]
+                    if (finalState == ConnectionState.READY) {
+                        Log.d(TAG, "Connection successful to $macAddress - READY state reached after timeout check")
+                        return true
+                    }
+                    
+                    Log.w(TAG, "Connection attempt $connectionAttempts timed out, final state: $finalState")
+                    
+                    // If this was the last attempt, return false
+                    if (connectionAttempts >= maxConnectionAttempts) {
+                        updateConnectionState(macAddress, ConnectionState.ERROR)
+                        return false
+                    }
+                    
+                    // Wait before next attempt
+                    delay(2000)
                 }
                 
-                // Wait a bit for connection to establish
-                Log.d(TAG, "Waiting for connection to establish...")
-                delay(3000)
-                
-                // Check if connection was successful
-                val currentState = _connectionStates.value[macAddress]
-                Log.d(TAG, "Connection state after attempt: $currentState")
-                
-                if (currentState == ConnectionState.READY || currentState == ConnectionState.CONNECTED) {
-                    Log.d(TAG, "Connection successful to $macAddress")
-                    return true
-                } else {
-                    Log.w(TAG, "Connection may have failed, current state: $currentState")
-                    return false
-                }
+                Log.w(TAG, "All connection attempts failed for $macAddress")
+                updateConnectionState(macAddress, ConnectionState.ERROR)
+                return false
             } else {
                 Log.e(TAG, "Context is null, cannot connect")
+                updateConnectionState(macAddress, ConnectionState.ERROR)
                 return false
             }
         } catch (e: Exception) {
@@ -399,6 +539,27 @@ class MinewBleManager @Inject constructor() {
         currentStates[macAddress] = state
         _connectionStates.value = currentStates
         Log.d(TAG, "Connection states updated: ${_connectionStates.value}")
+        
+        // Additional logging for debugging connection issues
+        when (state) {
+            ConnectionState.ERROR -> {
+                Log.e(TAG, "=== CONNECTION ERROR DIAGNOSTICS ===")
+                Log.e(TAG, "Device: $macAddress")
+                Log.e(TAG, "Time: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}")
+                Log.e(TAG, "All connection states: ${_connectionStates.value}")
+                Log.e(TAG, "Connected devices: ${connectedDevices.keys}")
+                Log.e(TAG, "=== END DIAGNOSTICS ===")
+            }
+            ConnectionState.READY -> {
+                Log.d(TAG, "=== CONNECTION SUCCESS ===")
+                Log.d(TAG, "Device: $macAddress")
+                Log.d(TAG, "Time: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}")
+                Log.d(TAG, "=== END SUCCESS ===")
+            }
+            else -> {
+                Log.d(TAG, "Connection state change: $macAddress -> $state")
+            }
+        }
     }
     
     // SDK Methods for Device Details
@@ -474,6 +635,58 @@ class MinewBleManager @Inject constructor() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error querying temperature history", e)
+            "Error: ${e.message}"
+        }
+    }
+    
+    suspend fun queryAllTemperatureHistory(macAddress: String): String {
+        return try {
+            Log.d(TAG, "Querying ALL temperature history for $macAddress")
+            
+            return suspendCancellableCoroutine { continuation ->
+                val systemTime = System.currentTimeMillis() / 1000
+                val rules = 0 // Get all data
+                
+                Log.d(TAG, "Calling SDK with params: rules=$rules, systemTime=$systemTime")
+                
+                mst03Manager.queryTemperatureHistoryData(macAddress, rules, 0, 0, systemTime) { result, historyData ->
+                    Log.d(TAG, "=== RAW SDK RESPONSE - ALL TEMPERATURE HISTORY ===")
+                    Log.d(TAG, "SDK Callback Result: $result")
+                    Log.d(TAG, "SDK Callback HistoryData Object: $historyData")
+                    if (historyData != null) {
+                        Log.d(TAG, "HistoryData.historyDataList: ${historyData.historyDataList}")
+                        Log.d(TAG, "HistoryData.historyDataList Size: ${historyData.historyDataList?.size}")
+                        historyData.historyDataList?.forEachIndexed { index, htData ->
+                            Log.d(TAG, "Raw HtData[$index]: $htData")
+                            Log.d(TAG, "  - timestamps: ${htData.timestamps}")
+                            Log.d(TAG, "  - temperature: ${htData.temperature}")
+                            Log.d(TAG, "  - humidity: ${htData.humidity}")
+                        }
+                    }
+                    Log.d(TAG, "=== END RAW SDK RESPONSE ===")
+                    
+                    if (result && historyData != null) {
+                        Log.d(TAG, "All temperature history data received: ${historyData.historyDataList?.size ?: 0} records")
+                        val resultText = StringBuilder().apply {
+                            append("All Temperature History Data:\n")
+                            append("Total Records: ${historyData.historyDataList?.size ?: 0}\n")
+                            append("Data Points:\n")
+                            historyData.historyDataList?.forEach { htData ->
+                                val timestamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                                    .format(java.util.Date(htData.timestamps))
+                                append("$timestamp: ${htData.temperature}°C\n")
+                            }
+                        }.toString()
+                        Log.d(TAG, "All temperature history result: $resultText")
+                        continuation.resume(resultText)
+                    } else {
+                        Log.w(TAG, "No temperature history data available - result: $result, data: $historyData")
+                        continuation.resume("No temperature history data available")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error querying all temperature history", e)
             "Error: ${e.message}"
         }
     }

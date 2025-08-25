@@ -1,56 +1,84 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- CCP Excursion Reader Theme -->
-    <style name="Theme.MinewSensorManager" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Primary brand color - Orange -->
-        <item name="colorPrimary">@color/primary_orange</item>
+    <!-- Base application theme. -->
+    <style name="Theme.CCPExcursionReader" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/primary</item>
         <item name="colorPrimaryVariant">@color/primary_hover</item>
-        <item name="colorOnPrimary">@color/on_primary</item>
-        
-        <!-- Secondary brand color -->
-        <item name="colorSecondary">@color/primary_orange</item>
-        <item name="colorSecondaryVariant">@color/primary_hover</item>
-        <item name="colorOnSecondary">@color/on_secondary</item>
-        
-        <!-- Status bar color -->
-        <item name="android:statusBarColor">@color/background_color</item>
+        <item name="colorOnPrimary">@color/card_background</item>
+        <item name="colorSecondary">@color/success</item>
+        <item name="colorSecondaryVariant">@color/success_border</item>
+        <item name="colorOnSecondary">@color/card_background</item>
+        <item name="android:statusBarColor">@color/background</item>
         <item name="android:windowLightStatusBar">true</item>
-        
-        <!-- Background and surface colors -->
-        <item name="android:windowBackground">@color/background_color</item>
-        <item name="colorSurface">@color/surface_color</item>
-        <item name="colorOnSurface">@color/text_primary</item>
-        
-        <!-- Error colors -->
-        <item name="colorError">@color/error_color</item>
-        <item name="colorOnError">@color/on_error</item>
-        
-        <!-- Typography -->
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
         <item name="android:fontFamily">sans-serif</item>
-        
-        <!-- Card style -->
-        <item name="cardCornerRadius">16dp</item>
-        <item name="cardElevation">4dp</item>
-        
-        <!-- Button style -->
-        <item name="materialButtonStyle">@style/Widget.MaterialComponents.Button</item>
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.CCPExcursionReader.LargeComponent</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.CCPExcursionReader.LargeComponent</item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.CCPExcursionReader.LargeComponent</item>
+        <item name="textAllCaps">false</item>
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="popupMenuStyle">@style/CustomPopupMenuStyle</item>
+        <item name="android:popupMenuStyle">@style/CustomPopupMenuStyle</item>
+        <item name="android:actionBarItemBackground">@drawable/bg_menu_item</item>
+        <item name="android:actionBarItemBackground">@drawable/bg_menu_item</item>
+    </style>
+    <style name="ShapeAppearance.CCPExcursionReader.LargeComponent" parent="ShapeAppearance.MaterialComponents.LargeComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">16dp</item>
     </style>
     
-    <!-- Custom Button Style -->
-    <style name="Widget.MaterialComponents.Button" parent="Widget.MaterialComponents.Button">
-        <item name="cornerRadius">16dp</item>
-        <item name="android:textAllCaps">false</item>
-        <item name="android:paddingStart">16dp</item>
-        <item name="android:paddingEnd">16dp</item>
-        <item name="android:paddingTop">8dp</item>
-        <item name="android:paddingBottom">8dp</item>
+    <style name="ToolbarTitleStyle" parent="TextAppearance.MaterialComponents.Headline6">
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:fontFamily">sans-serif</item>
     </style>
     
-    <!-- Outlined Button Style -->
-    <style name="Widget.MaterialComponents.Button.OutlinedButton" parent="Widget.MaterialComponents.Button.OutlinedButton">
-        <item name="cornerRadius">16dp</item>
+    <style name="PopupMenuStyle" parent="Widget.MaterialComponents.PopupMenu">
+        <item name="android:popupBackground">@drawable/bg_popup_menu</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:padding">8dp</item>
+    </style>
+    
+
+    
+    <style name="MenuItemStyle" parent="Widget.MaterialComponents.TextView">
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:background">@drawable/bg_menu_item</item>
+        <item name="android:padding">16dp</item>
+        <item name="android:layout_margin">4dp</item>
+    </style>
+    
+    <style name="ConnectButtonStyle" parent="Widget.MaterialComponents.Button">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/card_background</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:letterSpacing">0</item>
         <item name="android:textAllCaps">false</item>
-        <item name="strokeColor">@color/primary_orange</item>
-        <item name="android:textColor">@color/primary_orange</item>
+        <item name="android:background">@drawable/bg_scan_button</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:paddingTop">4dp</item>
+        <item name="android:paddingBottom">4dp</item>
+        <item name="android:minHeight">24dp</item>
+    </style>
+    
+    <!-- Consistent text style for app-wide use -->
+    <style name="AppTextStyle" parent="TextAppearance.MaterialComponents.Body1">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    
+    <!-- Style for input fields (normal weight) -->
+    <style name="AppInputStyle" parent="TextAppearance.MaterialComponents.Body1">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">normal</item>
     </style>
 </resources>

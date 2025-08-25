@@ -1,28 +1,98 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@color/background"
+    tools:context=".DeviceDetailsActivity">
 
-                <com.google.android.material.appbar.AppBarLayout
-                android:layout_width="match_parent"
+    <!-- Header Section -->
+    <LinearLayout
+        android:id="@+id/header_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/bg_header_bottom_border"
+        android:paddingTop="16dp"
+        android:paddingStart="12dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- Toolbar Row with Back Button and Title -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="10dp"
+        >
+
+            <ImageButton
+                android:id="@+id/btn_back"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@android:color/transparent"
+                android:src="@drawable/ic_back"
+                android:contentDescription="Back"
+                android:scaleType="center"
+                android:tint="@color/text_primary"
+                android:layout_marginBottom="10dp"
+                android:padding="8dp" />
+
+            <TextView
+                android:id="@+id/tv_device_details_title"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:background="@color/primary_orange">
+                android:layout_weight="1"
+                android:text="@string/device_details"
+                android:textColor="@color/text_primary"
+                android:textStyle="bold"
+                android:textSize="20sp"
+                android:layout_marginTop="-1dp"
+                android:layout_marginBottom="10dp"
+                android:layout_marginStart="12dp" />
 
-                <androidx.appcompat.widget.Toolbar
-                    android:id="@+id/toolbar"
-                    android:layout_width="match_parent"
-                    android:layout_height="?attr/actionBarSize"
-                    android:background="@color/primary_orange"
-                    app:titleTextColor="@color/white" />
+        </LinearLayout>
 
-            </com.google.android.material.appbar.AppBarLayout>
+        <!-- Device MAC Address -->
+        <TextView
+            android:id="@+id/tv_device_mac"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Loading..."
+            android:textColor="@color/text_primary"
+            android:textSize="14sp"
+            android:layout_marginBottom="5dp"
+            android:layout_marginTop="0dp"
+            android:gravity="center"
+            android:textAlignment="center" />
 
+        <!-- Connection Status -->
+        <TextView
+            android:id="@+id/tv_connection_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Connecting..."
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:layout_marginBottom="10dp"
+            android:gravity="center"
+            android:textAlignment="center" />
+
+    </LinearLayout>
+
+    <!-- Scrollable Content -->
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+        android:layout_height="0dp"
+        android:fillViewport="true"
+        app:layout_constraintTop_toBottomOf="@+id/header_layout"
+        app:layout_constraintBottom_toTopOf="@+id/app_id_footer"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -31,483 +101,387 @@
             android:padding="16dp">
 
             <!-- Device Info Card -->
-            <com.google.android.material.card.MaterialCardView
+            <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
                 app:cardCornerRadius="16dp"
-                app:cardElevation="4dp"
+                app:cardElevation="0dp"
                 app:cardBackgroundColor="@color/card_background">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="16dp">
+                    android:padding="10dp">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Device Information"
-                        android:textAppearance="?attr/textAppearanceHeadline6"
+                        android:text="@string/device_information"
                         android:textColor="@color/text_primary"
-                        android:textSize="18sp"
                         android:textStyle="bold"
+                        android:textSize="18sp"
                         android:layout_marginBottom="16dp" />
 
+                    <!-- Battery Level -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="12dp">
+
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@drawable/ic_battery"
+                            android:contentDescription="Battery"
+                            android:tint="@color/text_secondary" />
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/battery_level"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:layout_marginStart="12dp" />
+
+                        <TextView
+                            android:id="@+id/tv_battery_level"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Loading..."
+                            android:textColor="@color/text_secondary"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                    </LinearLayout>
+
+                    <!-- Firmware Version -->
+                    <LinearLayout
+                        android:id="@+id/firmware_container"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:layout_marginBottom="5dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="4dp">
+
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:src="@drawable/ic_firmware"
+                                android:contentDescription="Firmware"
+                                android:tint="@color/text_secondary" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/firmware_version"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp"
+                                android:layout_marginStart="12dp" />
+
+                            <TextView
+                                android:id="@+id/tv_firmware_version"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Loading..."
+                                android:textColor="@color/text_secondary"
+                                android:textSize="14sp" />
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                    <!-- Excursion Event At -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
                         android:layout_marginBottom="8dp">
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Name: "
-                            android:textStyle="bold"
-                            android:textColor="@color/text_primary"
-                            android:textSize="16sp" />
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@drawable/ic_clock"
+                            android:contentDescription="Excursion Event"
+                            android:tint="@color/text_secondary" />
 
                         <TextView
-                            android:id="@+id/text_device_name"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
+                            android:text="@string/excursion_event_at"
                             android:textColor="@color/text_primary"
-                            android:textSize="16sp"
-                            tools:text="MST03-1234" />
+                            android:textSize="14sp"
+                            android:layout_marginStart="12dp" />
+
+                        <TextView
+                            android:id="@+id/tv_excursion_event_at"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Loading..."
+                            android:textColor="@color/text_secondary"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
 
                     </LinearLayout>
 
+                    <!-- Excursion Duration -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
-                        android:layout_marginBottom="8dp">
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="12dp">
+
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@drawable/ic_clock"
+                            android:contentDescription="Excursion Duration"
+                            android:tint="@color/text_secondary" />
 
                         <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="MAC: "
-                            android:textStyle="bold"
-                            android:textColor="@color/text_primary"
-                            android:textSize="16sp" />
-
-                        <TextView
-                            android:id="@+id/text_mac_address"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
+                            android:text="Excursion Duration"
                             android:textColor="@color/text_primary"
-                            android:textSize="16sp"
-                            tools:text="AA:BB:CC:DD:EE:FF" />
+                            android:textSize="14sp"
+                            android:layout_marginStart="12dp" />
+
+                        <TextView
+                            android:id="@+id/tv_excursion_duration"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Calculating..."
+                            android:textColor="@color/text_secondary"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
 
                     </LinearLayout>
 
+                    <!-- Current Temperature -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
-                        android:layout_marginBottom="8dp">
+                        android:gravity="center_vertical">
+
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@drawable/ic_temp"
+                            android:contentDescription="Temperature"
+                            android:tint="@color/text_secondary" />
 
                         <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Firmware: "
-                            android:textStyle="bold"
-                            android:textColor="@color/text_primary"
-                            android:textSize="16sp" />
-
-                        <TextView
-                            android:id="@+id/text_firmware_version"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
+                            android:text="@string/current_temperature"
                             android:textColor="@color/text_primary"
-                            android:textSize="16sp"
-                            tools:text="1.0.0" />
-
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginBottom="8dp">
+                            android:textSize="14sp"
+                            android:layout_marginStart="12dp" />
 
                         <TextView
+                            android:id="@+id/tv_current_temperature"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Battery: "
-                            android:textStyle="bold"
-                            android:textColor="@color/text_primary"
-                            android:textSize="16sp" />
-
-                        <TextView
-                            android:id="@+id/text_battery_level"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:textColor="@color/text_primary"
+                            android:text="Loading..."
+                            android:textColor="@color/text_secondary"
                             android:textSize="16sp"
-                            tools:text="85%" />
-
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginBottom="8dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="RSSI: "
-                            android:textStyle="bold"
-                            android:textColor="@color/text_primary"
-                            android:textSize="16sp" />
-
-                        <TextView
-                            android:id="@+id/text_rssi"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:textColor="@color/text_primary"
-                            android:textSize="16sp"
-                            tools:text="-45 dBm" />
-
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginBottom="8dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Last Seen: "
-                            android:textStyle="bold"
-                            android:textColor="@color/text_primary"
-                            android:textSize="16sp" />
-
-                        <TextView
-                            android:id="@+id/text_last_seen"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:textColor="@color/text_primary"
-                            android:textSize="16sp"
-                            tools:text="14:30:25" />
-
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Status: "
-                            android:textStyle="bold"
-                            android:textColor="@color/text_primary"
-                            android:textSize="16sp" />
-
-                        <TextView
-                            android:id="@+id/text_connection_status"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:textColor="@color/status_connected"
-                            android:textSize="16sp"
-                            android:textStyle="bold"
-                            tools:text="Connected" />
-
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginTop="8dp">
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/button_test_methods"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Test Methods"
-                            android:textAllCaps="false"
-                            style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+                            android:textStyle="bold" />
 
                     </LinearLayout>
 
                 </LinearLayout>
 
-            </com.google.android.material.card.MaterialCardView>
+            </androidx.cardview.widget.CardView>
 
-            <!-- Connected Content -->
-            <LinearLayout
-                android:id="@+id/layout_connected_content"
+            <!-- Temperature Graph Card -->
+            <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="visible">
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="1dp"
+                app:cardBackgroundColor="@color/card_background">
 
-                <!-- Sensor Data Card -->
-                <com.google.android.material.card.MaterialCardView
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
-                    app:cardCornerRadius="16dp"
-                    app:cardElevation="4dp"
-                    app:cardBackgroundColor="@color/card_background">
+                    android:orientation="vertical"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
+                >
 
-                    <LinearLayout
+                    <!-- Chart area -->
+                    <FrameLayout
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:padding="16dp">
+                        android:layout_height="300dp">
 
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:layout_marginBottom="16dp">
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="Real-time Sensor Data"
-                                android:textAppearance="?attr/textAppearanceHeadline6"
-                                android:textColor="@color/text_primary"
-                                android:textSize="18sp"
-                                android:textStyle="bold" />
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/button_copy_sensor_data"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Copy"
-                                android:textAllCaps="false"
-                                android:visibility="gone"
-                                style="@style/Widget.MaterialComponents.Button.TextButton" />
-
-                        </LinearLayout>
-
+                        <!-- Placeholder for graph -->
                         <TextView
-                            android:id="@+id/text_sensor_data"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:textAppearance="?attr/textAppearanceBody2"
-                            android:textColor="@color/text_primary"
-                            android:textSize="16sp"
-                            android:background="@drawable/bg_data_card"
-                            android:padding="12dp"
-                            tools:text="Temperature: 27.5°C&#10;Battery: 85%&#10;Light Intensity: 500 lux" />
-
-                    </LinearLayout>
-
-                </com.google.android.material.card.MaterialCardView>
-
-                <!-- Configuration Data Card -->
-                <com.google.android.material.card.MaterialCardView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
-                    app:cardCornerRadius="16dp"
-                    app:cardElevation="4dp"
-                    app:cardBackgroundColor="@color/card_background">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:padding="16dp">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:layout_marginBottom="16dp">
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="Configuration Data"
-                                android:textAppearance="?attr/textAppearanceHeadline6"
-                                android:textColor="@color/text_primary"
-                                android:textSize="18sp"
-                                android:textStyle="bold" />
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/button_copy_config_data"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Copy"
-                                android:textAllCaps="false"
-                                android:visibility="gone"
-                                style="@style/Widget.MaterialComponents.Button.TextButton" />
-
-                        </LinearLayout>
-
-                        <TextView
-                            android:id="@+id/text_configuration_data"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:textAppearance="?attr/textAppearanceBody2"
-                            android:textColor="@color/text_primary"
-                            android:textSize="16sp"
-                            android:background="@drawable/bg_data_card"
-                            android:padding="12dp"
-                            tools:text="Temperature Upper Limit: 30°C&#10;Temperature Lower Limit: 20°C&#10;Light Upper Limit: 1000 lux&#10;Light Lower Limit: 100 lux" />
-
-                    </LinearLayout>
-
-                </com.google.android.material.card.MaterialCardView>
-
-                <!-- Available Methods Card -->
-                <com.google.android.material.card.MaterialCardView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
-                    app:cardCornerRadius="16dp"
-                    app:cardElevation="4dp"
-                    app:cardBackgroundColor="@color/card_background">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:padding="16dp">
-
-                        <TextView
+                            android:id="@+id/tv_graph_placeholder"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Available SDK Methods"
-                            android:textAppearance="?attr/textAppearanceHeadline6"
+                            android:layout_gravity="center"
+                            android:text="\nTemperature Graph"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="16sp"
+                            android:gravity="center"
+                            android:textAlignment="center" />
+
+                        <!-- Temperature History Data Display -->
+                        <TextView
+                            android:id="@+id/tv_temperature_history"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp"
+                            android:gravity="center"
+                            android:textAlignment="center"
+                            android:padding="16dp"
+                            android:visibility="gone" />
+
+                        <!-- Y-axis title (positioned on left edge) -->
+                        <TextView
+                            android:id="@+id/tv_y_axis_title"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Temperature (°C)"
+                            android:rotation="-90"
+                            android:layout_gravity="center_vertical|start"
+                            android:layout_marginStart="-45dp"
+                            android:textSize="12sp"
                             android:textColor="@color/text_primary"
-                            android:textSize="18sp"
-                            android:textStyle="bold"
-                            android:layout_marginBottom="16dp" />
+                            android:visibility="gone" />
 
-                        <androidx.recyclerview.widget.RecyclerView
-                            android:id="@+id/recycler_view_methods"
-                            android:layout_width="match_parent"
+                        <!-- X-axis title (positioned at bottom center) -->
+                        <TextView
+                            android:id="@+id/tv_x_axis_title"
+                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:nestedScrollingEnabled="false" />
+                            android:text="Time"
+                            android:layout_gravity="bottom|center_horizontal"
+                            android:layout_marginBottom="-3dp"
+                            android:textSize="12sp"
+                            android:textColor="@color/text_primary"
+                            android:visibility="gone" />
 
-                    </LinearLayout>
+                        <!-- Line Chart -->
+                        <com.github.mikephil.charting.charts.LineChart
+                            android:id="@+id/graph_container"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:visibility="gone"
+                            android:layout_marginLeft="10dp"
+                            android:layout_marginBottom="15dp" />
 
-                </com.google.android.material.card.MaterialCardView>
-
-                <!-- Method Result Card -->
-                <com.google.android.material.card.MaterialCardView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
-                    app:cardCornerRadius="16dp"
-                    app:cardElevation="4dp"
-                    app:cardBackgroundColor="@color/card_background">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:padding="16dp">
-
+                        <!-- Data Loading Overlay -->
                         <LinearLayout
+                            android:id="@+id/loading_overlay"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:layout_marginBottom="16dp">
+                            android:layout_height="match_parent"
+                            android:background="#80FFFFFF"
+                            android:orientation="vertical"
+                            android:gravity="center"
+                            android:visibility="gone">
 
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="Method Results"
-                                android:textAppearance="?attr/textAppearanceHeadline6"
-                                android:textColor="@color/text_primary"
-                                android:textSize="18sp"
-                                android:textStyle="bold" />
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/button_copy_result"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Copy"
-                                android:textAllCaps="false"
-                                android:visibility="gone"
-                                style="@style/Widget.MaterialComponents.Button.TextButton" />
+                            <ProgressBar
+                                android:layout_width="48dp"
+                                android:layout_height="48dp"
+                                android:indeterminateTint="@color/primary"
+                                android:layout_marginBottom="16dp" />
 
                         </LinearLayout>
 
-                        <TextView
-                            android:id="@+id/text_method_result"
-                            android:layout_width="match_parent"
+                    </FrameLayout>
+
+                    <!-- Graph Legend -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center"
+                        android:layout_marginTop="8dp">
+
+                        <!-- High Threshold Legend -->
+                        <LinearLayout
+                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:textAppearance="?attr/textAppearanceBody2"
-                            android:textColor="@color/text_primary"
-                            android:textSize="16sp"
-                            android:background="@drawable/bg_data_card"
-                            android:padding="12dp"
-                            android:minHeight="60dp"
-                            tools:text="Click on any method above to see results here..." />
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginEnd="24dp">
+
+                            <View
+                                android:layout_width="12dp"
+                                android:layout_height="12dp"
+                                android:background="@color/error"
+                                android:layout_marginEnd="8dp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="High Threshold (8°C)"
+                                android:textColor="@color/text_primary"
+                                android:textSize="12sp" />
+
+                        </LinearLayout>
+
+                        <!-- Low Threshold Legend -->
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <View
+                                android:layout_width="12dp"
+                                android:layout_height="12dp"
+                                android:background="@color/blue"
+                                android:layout_marginEnd="8dp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Low Threshold (2°C)"
+                                android:textColor="@color/text_primary"
+                                android:textSize="12sp" />
+
+                        </LinearLayout>
 
                     </LinearLayout>
 
-                </com.google.android.material.card.MaterialCardView>
+                </LinearLayout>
 
-            </LinearLayout>
-
-            <!-- Disconnected Content -->
-            <LinearLayout
-                android:id="@+id/layout_disconnected_content"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:padding="32dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Device Not Connected"
-                    android:textAppearance="?attr/textAppearanceHeadline6"
-                    android:textColor="@color/text_primary"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="16dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Connect to the device to view detailed information and available methods."
-                    android:textAppearance="?attr/textAppearanceBody2"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="16sp"
-                    android:gravity="center"
-                    android:layout_marginBottom="16dp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/button_show_methods_debug"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Show Methods (Debug)"
-                    android:textAllCaps="false"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
-
-            </LinearLayout>
+            </androidx.cardview.widget.CardView>
 
         </LinearLayout>
 
     </androidx.core.widget.NestedScrollView>
 
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+    <!-- Elevated App ID Footer -->
+    <include
+        android:id="@+id/app_id_footer"
+        layout="@layout/layout_scan_app_id_footer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout> 

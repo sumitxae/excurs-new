@@ -14,10 +14,14 @@ import com.minew.sensormanager.services.AlertService
 import com.minew.sensormanager.utils.PermissionHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -43,6 +47,9 @@ class MainViewModel @Inject constructor(
     
     // Connected devices for reference
     val connectedDevices: LiveData<List<DeviceInfo>> = deviceRepository.getConnectedDevices().asLiveData()
+    
+    // Job to manage continuous scanning lifecycle
+    private var continuousScanJob: Job? = null
     
     init {
         observeBleUpdates()
@@ -128,18 +135,46 @@ class MainViewModel @Inject constructor(
     }
     
     fun startContinuousScanning(context: android.content.Context): Boolean {
-        Log.d("MainViewModel", "Starting continuous scanning")
-        return if (PermissionHelper.hasAllRequiredPermissions(context)) {
-            bleManager.startScan(context, 300000) // 5 minutes scan duration
-        } else {
+        Log.d("MainViewModel", "Starting continuous scanning loop")
+        if (!PermissionHelper.hasAllRequiredPermissions(context)) {
             val errorMsg = PermissionHelper.getPermissionErrorMessage(context)
             _errorMessage.value = errorMsg ?: "Required permissions not granted. Please grant Bluetooth and Location permissions."
-            false
+            return false
         }
+        
+        if (continuousScanJob?.isActive == true) {
+            Log.d("MainViewModel", "Continuous scanning already running")
+            return true
+        }
+        
+        continuousScanJob = viewModelScope.launch {
+            while (isActive) {
+                try {
+                    // Attempt to start a 5-minute scan window
+                    val started = bleManager.startScan(context, 300000)
+                    if (!started) {
+                        // If start failed (likely permissions toggled), back off briefly
+                        delay(2000)
+                        continue
+                    }
+                    // Wait until current scan session stops (SDK triggers onStopScan after duration)
+                    bleManager.isScanning.first { isScanning -> !isScanning }
+                    // Small gap before restarting
+                    delay(300)
+                } catch (e: Exception) {
+                    Log.e("MainViewModel", "Continuous scanning loop error: ${e.message}")
+                    // Brief delay to avoid tight failure loop
+                    delay(1000)
+                }
+            }
+        }
+        return true
     }
     
     fun stopScanning(context: android.content.Context) {
-        Log.d("MainViewModel", "Stopping scanning")
+        Log.d("MainViewModel", "Stopping scanning and cancelling continuous loop")
+        continuousScanJob?.cancel()
+        continuousScanJob = null
         bleManager.stopScan(context)
     }
     
