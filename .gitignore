@@ -1,0 +1,69 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.iml
+.gradle/
+.vscode/
+
+# Android build outputs
+/build/
+*/build/
+app/build/
+.gradle/
+.cxx/
+.externalNativeBuild/
+captures/
+app/outputs/
+*/outputs/
+app/release/
+app/debug/
+
+# Android packages
+*.apk
+*.ap_
+*.aab
+
+# Local SDK/NDK configuration
+local.properties
+
+# Logs
+*.log
+
+# Keystores (do not commit signing keys)
+*.jks
+*.keystore
+*.keystore.properties
+
+# Gradle
+# (Keep wrapper JARs committed)
+# gradle-wrapper.jar should be kept; do not ignore gradle/wrapper/**
+!gradle/wrapper/gradle-wrapper.jar
+
+# Node (if any tooling pulls this in)
+node_modules/
+
+# Env files
+.env
+.env.*
+
+# Misc cache
+**/.cache/
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+.specstory/**

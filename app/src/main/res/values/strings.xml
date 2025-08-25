@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Minew Sensor Manager</string>
+    
+    <!-- Navigation -->
+    <string name="nav_devices">Devices</string>
+    <string name="nav_realtime">Real-time</string>
+    <string name="nav_history">History</string>
+    <string name="nav_alerts">Alerts</string>
+    
+    <!-- Device List -->
+    <string name="no_devices_found">No devices found</string>
+    <string name="scan_for_devices">Tap + to scan for devices</string>
+    <string name="connect">Connect</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="connected">Connected</string>
+    <string name="connecting">Connecting</string>
+    <string name="disconnected">Disconnected</string>
+    
+    <!-- Device Detail -->
+    <string name="temperature">Temperature</string>
+    <string name="light_intensity">Light Intensity</string>
+    <string name="battery_level">Battery Level</string>
+    <string name="last_updated">Last Updated</string>
+    <string name="device_configuration">Configuration</string>
+    <string name="view_history">View History</string>
+    
+    <!-- Configuration -->
+    <string name="temperature_thresholds">Temperature Thresholds</string>
+    <string name="light_thresholds">Light Thresholds</string>
+    <string name="sampling_interval">Sampling Interval</string>
+    <string name="alarm_settings">Alarm Settings</string>
+    <string name="save_configuration">Save Configuration</string>
+    
+    <!-- History -->
+    <string name="temperature_history">Temperature History</string>
+    <string name="light_history">Light History</string>
+    <string name="export_data">Export Data</string>
+    <string name="date_range">Date Range</string>
+    
+    <!-- Alerts -->
+    <string name="temperature_alert">Temperature Alert</string>
+    <string name="light_alert">Light Alert</string>
+    <string name="battery_low_alert">Battery Low Alert</string>
+    <string name="device_offline_alert">Device Offline Alert</string>
+    
+    <!-- Units -->
+    <string name="celsius">°C</string>
+    <string name="nw_cm2">nW/cm²</string>
+    <string name="percent">%</string>
+    <string name="seconds">seconds</string>
+    <string name="minutes">minutes</string>
+    
+    <!-- Errors -->
+    <string name="connection_failed">Connection failed</string>
+    <string name="bluetooth_required">Bluetooth is required</string>
+    <string name="permissions_required">Required permissions must be granted</string>
+    <string name="configuration_failed">Configuration update failed</string>
+    <string name="data_export_failed">Data export failed</string>
+    
+    <!-- Success -->
+    <string name="configuration_saved">Configuration saved successfully</string>
+    <string name="data_exported">Data exported successfully</string>
+    <string name="device_connected">Device connected</string>
+    <string name="device_disconnected">Device disconnected</string>
+</resources>
