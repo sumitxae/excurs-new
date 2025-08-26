@@ -12,6 +12,7 @@ import com.minew.sensormanager.data.models.DeviceInfo
 import com.minew.sensormanager.data.models.ConnectionState
 import com.minew.sensormanager.services.AlertService
 import com.minew.sensormanager.utils.PermissionHelper
+import com.minew.sensormanager.utils.AppIdUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -29,7 +30,8 @@ import javax.inject.Inject
 class MainViewModel @Inject constructor(
     private val deviceRepository: DeviceRepository,
     private val bleManager: MinewBleManager,
-    private val alertService: AlertService
+    private val alertService: AlertService,
+    private val application: android.app.Application
 ) : ViewModel() {
     
     private val _errorMessage = MutableLiveData<String?>()
@@ -45,6 +47,14 @@ class MainViewModel @Inject constructor(
     private val _discoveredDevices = MutableStateFlow<List<DeviceInfo>>(emptyList())
     val discoveredDevices: LiveData<List<DeviceInfo>> = _discoveredDevices.asLiveData()
     
+    // Search functionality
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: LiveData<String> = _searchQuery.asLiveData()
+    
+    // Filtered devices based on search
+    private val _filteredDevices = MutableStateFlow<List<DeviceInfo>>(emptyList())
+    val filteredDevices: LiveData<List<DeviceInfo>> = _filteredDevices.asLiveData()
+    
     // Connected devices for reference
     val connectedDevices: LiveData<List<DeviceInfo>> = deviceRepository.getConnectedDevices().asLiveData()
     
@@ -53,6 +63,8 @@ class MainViewModel @Inject constructor(
     
     init {
         observeBleUpdates()
+        // Initialize filtered devices with empty list
+        _filteredDevices.value = emptyList()
     }
     
     private fun observeBleUpdates() {
@@ -61,6 +73,8 @@ class MainViewModel @Inject constructor(
             bleManager.scanResults.collect { devices ->
                 _discoveredDevices.value = devices
                 Log.d("MainViewModel", "Discovered ${devices.size} devices")
+                // Apply search filter to new devices
+                applySearchFilter()
             }
         }
         
@@ -95,6 +109,9 @@ class MainViewModel @Inject constructor(
     suspend fun initializeApp() {
         _isLoading.value = true
         try {
+            // Log app installation information for tracking
+            logAppInstallationInfo()
+            
             // Initialize alert service
             alertService.initialize()
             
@@ -104,6 +121,31 @@ class MainViewModel @Inject constructor(
             _errorMessage.value = "Failed to initialize app: ${e.message}"
         } finally {
             _isLoading.value = false
+        }
+    }
+    
+    /**
+     * Logs app installation information for tracking and analytics purposes.
+     */
+    private fun logAppInstallationInfo() {
+        try {
+            val installationId = AppIdUtils.getInstallationId(application)
+            val isFreshInstall = AppIdUtils.isFreshInstallation(application)
+            val appVersion = AppIdUtils.getAppVersion(application)
+            val trackingId = AppIdUtils.getTrackingId(application)
+            
+            Log.i("MainViewModel", "App Installation Tracking:")
+            Log.i("MainViewModel", "Installation ID: $installationId")
+            Log.i("MainViewModel", "Tracking ID: $trackingId")
+            Log.i("MainViewModel", "Is Fresh Installation: $isFreshInstall")
+            Log.i("MainViewModel", "App Version: $appVersion")
+            
+            if (isFreshInstall) {
+                Log.i("MainViewModel", "First time app launch detected - new user")
+            }
+            
+        } catch (e: Exception) {
+            Log.e("MainViewModel", "Error logging app installation info", e)
         }
     }
     
@@ -191,5 +233,40 @@ class MainViewModel @Inject constructor(
     
     fun clearError() {
         _errorMessage.value = null
+    }
+    
+    // Search functionality
+    fun setSearchQuery(query: String) {
+        Log.d("MainViewModel", "Setting search query: '$query'")
+        _searchQuery.value = query
+        applySearchFilter()
+    }
+    
+    fun clearSearch() {
+        Log.d("MainViewModel", "Clearing search")
+        _searchQuery.value = ""
+        applySearchFilter()
+    }
+    
+    private fun applySearchFilter() {
+        val query = _searchQuery.value.trim()
+        val devices = _discoveredDevices.value
+        Log.d("MainViewModel", "applySearchFilter called with query: '$query', devices count: ${devices.size}")
+        
+        val filtered = if (query.isEmpty()) {
+            devices
+        } else {
+            devices.filter { device ->
+                val matchesMac = device.macAddress.contains(query, ignoreCase = true)
+                val matchesName = device.name?.contains(query, ignoreCase = true) == true
+                val matchesTemp = (device.temperature?.toString()?.contains(query) == true)
+                
+                Log.d("MainViewModel", "Device ${device.macAddress}: mac=$matchesMac, name=$matchesName, temp=$matchesTemp")
+                
+                matchesMac || matchesName || matchesTemp
+            }
+        }
+        _filteredDevices.value = filtered
+        Log.d("MainViewModel", "Search query: '$query', Filtered ${filtered.size} devices from ${devices.size}")
     }
 }

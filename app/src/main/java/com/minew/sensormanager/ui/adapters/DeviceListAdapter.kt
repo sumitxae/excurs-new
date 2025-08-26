@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.minew.sensormanager.BuildConfig
 import com.minew.sensormanager.R
+import com.minew.sensormanager.auth.AuthManager
 import com.minew.sensormanager.data.models.ConnectionState
 import com.minew.sensormanager.data.models.DeviceInfo
 import com.minew.sensormanager.databinding.ItemScanDeviceBinding
@@ -16,7 +17,8 @@ import com.minew.sensormanager.databinding.ItemScanDeviceBinding
 class DeviceListAdapter(
         private val onDeviceClick: (DeviceInfo) -> Unit,
         private val onConnectClick: (DeviceInfo) -> Unit,
-        private val onDisconnectClick: (DeviceInfo) -> Unit
+        private val onDisconnectClick: (DeviceInfo) -> Unit,
+        private val onSettingsClick: (DeviceInfo) -> Unit
 ) : ListAdapter<DeviceInfo, DeviceListAdapter.DeviceViewHolder>(DeviceDiffCallback()) {
 
     private val connectionStates = mutableMapOf<String, ConnectionState>()
@@ -63,6 +65,19 @@ class DeviceListAdapter(
 
                 val connectionState = connectionStates[device.macAddress] ?: device.connectionState
                 updateConnectionStatus(connectionState)
+
+                // Show settings button only for admin users
+                val authManager = AuthManager.getInstance(itemView.context)
+                val isAdminUser = authManager.isLoggedIn() && authManager.getUserRole() == "admin"
+                
+                if (isAdminUser) {
+                    btnDeviceSettings.visibility = View.VISIBLE
+                    btnDeviceSettings.setOnClickListener {
+                        onSettingsClick(device)
+                    }
+                } else {
+                    btnDeviceSettings.visibility = View.GONE
+                }
 
                 // Show Connect button only when device is in excursion state (2°C <= temp <= 8°C)
                 val tempValue = device.temperature

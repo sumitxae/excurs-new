@@ -55,4 +55,14 @@
     <string name="excursion_event_at">Excursion Event At</string>
     <string name="status_normal">Normal</string>
     <string name="status_alert">Alert</string>
+    <string name="normal_temprature_thresholds">Normal Temprature Thresholds</string>
+    <string name="min_c">Min (°C)</string>
+    <string name="max_c">Max (°C)</string>
+    <string name="low_temperature_thresholds">Low Temperature Thresholds</string>
+    <string name="save_settings">Save Settings</string>
+    <string name="reset_to_defaults">Reset to Defaults</string>
+    <string name="check_for_updates">Check for Updates</string>
+    <string name="checking_for_updates">Checking for updates...</string>
+    <string name="device_settings">Device Settings</string>
+    <string name="back">Back</string>
 </resources>

@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import com.minew.sensormanager.R
 import com.minew.sensormanager.data.models.SensorData
 import com.minew.sensormanager.ui.activities.MainActivity
+import com.minew.sensormanager.utils.AppIdUtils
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -54,6 +55,9 @@ class AlertService @Inject constructor(
     }
     
     fun checkForAlerts(sensorData: SensorData) {
+        // Log alert with installation tracking
+        logAlertWithInstallationId(sensorData)
+        
         // Check temperature alerts
         if (sensorData.hasTemperatureAlarm) {
             showTemperatureAlert(sensorData)
@@ -67,6 +71,27 @@ class AlertService @Inject constructor(
         // Check battery alerts
         if (sensorData.battery < 20) {
             showBatteryAlert(sensorData)
+        }
+    }
+    
+    /**
+     * Logs alert information with installation ID for tracking purposes.
+     */
+    private fun logAlertWithInstallationId(sensorData: SensorData) {
+        try {
+            val installationId = AppIdUtils.getInstallationId(context)
+            val trackingId = AppIdUtils.getTrackingId(context)
+            
+            android.util.Log.i("AlertService", "Alert detected for installation: $installationId")
+            android.util.Log.i("AlertService", "Tracking ID: $trackingId")
+            android.util.Log.i("AlertService", "Device MAC: ${sensorData.macAddress}")
+            android.util.Log.i("AlertService", "Temperature: ${sensorData.temperature}°C")
+            android.util.Log.i("AlertService", "Has Temperature Alarm: ${sensorData.hasTemperatureAlarm}")
+            android.util.Log.i("AlertService", "Has Light Alarm: ${sensorData.hasLightAlarm}")
+            android.util.Log.i("AlertService", "Battery Level: ${sensorData.battery}%")
+            
+        } catch (e: Exception) {
+            android.util.Log.e("AlertService", "Error logging alert with installation ID", e)
         }
     }
     

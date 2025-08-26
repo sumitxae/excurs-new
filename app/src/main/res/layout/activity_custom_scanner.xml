@@ -2,24 +2,19 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="#000000">
 
-    <com.budiyev.android.codescanner.CodeScannerView
-        android:id="@+id/scanner_view"
+    <!-- ZXing Barcode Scanner View -->
+    <com.journeyapps.barcodescanner.DecoratedBarcodeView
+        android:id="@+id/zxing_barcode_scanner"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        app:autoFocusButtonColor="@android:color/white"
-        app:autoFocusButtonVisible="true"
-        app:flashButtonColor="@android:color/white"
-        app:flashButtonVisible="true"
-        app:frameColor="@android:color/white"
-        app:frameCornersSize="50dp"
-        app:frameCornersRadius="0dp"
-        app:frameAspectRatioWidth="1"
-        app:frameAspectRatioHeight="1"
-        app:frameSize="0.75"
-        app:frameThickness="2dp"
-        app:maskColor="#77000000" />
+        app:zxing_preview_scaling_strategy="centerCrop"
+        app:zxing_use_texture_view="true"
+        app:zxing_framing_rect_width="250dp"
+        app:zxing_framing_rect_height="250dp"
+        app:zxing_scanner_layout="@layout/custom_scanner_layout" />
 
     <!-- Header with back button and title -->
     <LinearLayout
@@ -30,16 +25,30 @@
         android:padding="16dp"
         android:gravity="center_vertical">
 
-        <Button
+        <LinearLayout
             android:id="@+id/btn_back"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="← Back"
-            android:textColor="@android:color/white"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:padding="8dp" />
+            android:padding="8dp">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_back"
+                android:tint="@android:color/white" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="BACK"
+                android:textColor="@android:color/white"
+                android:textSize="14sp"
+                android:layout_marginStart="4dp" />
+
+        </LinearLayout>
 
         <TextView
             android:layout_width="0dp"
@@ -51,9 +60,13 @@
             android:textStyle="bold"
             android:gravity="center" />
 
-        <View
-            android:layout_width="48dp"
-            android:layout_height="1dp" />
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_flash_off"
+            android:tint="@android:color/white"
+            android:contentDescription="Flash off" />
+
     </LinearLayout>
 
     <!-- Instructions at bottom -->
@@ -81,6 +94,7 @@
             android:textSize="14sp"
             android:gravity="center"
             android:layout_marginTop="4dp" />
+
     </LinearLayout>
 
-</FrameLayout> 
+</FrameLayout>

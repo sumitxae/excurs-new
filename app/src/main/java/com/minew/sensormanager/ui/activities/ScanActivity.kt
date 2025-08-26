@@ -2,9 +2,18 @@ package com.minew.sensormanager.ui.activities
 
 import android.content.Intent
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.util.Log
+import android.view.Menu
 import android.view.MenuItem
+import android.widget.ImageButton
+import androidx.appcompat.widget.PopupMenu
 import android.view.View
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -15,9 +24,11 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.minew.sensormanager.BuildConfig
 import com.minew.sensormanager.R
+import com.minew.sensormanager.auth.AuthManager
 import com.minew.sensormanager.ui.adapters.DeviceListAdapter
 import com.minew.sensormanager.ui.viewmodels.MainViewModel
 import com.minew.sensormanager.data.models.DeviceInfo
+import com.minew.sensormanager.utils.AppIdUtils
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -26,13 +37,35 @@ class ScanActivity : AppCompatActivity() {
     
     private val viewModel: MainViewModel by viewModels()
     private lateinit var deviceAdapter: DeviceListAdapter
+    private var isConnectingToSettings: Boolean = false
     private lateinit var recyclerView: RecyclerView
     private lateinit var swipeRefreshLayout: SwipeRefreshLayout
+    private lateinit var searchEditText: EditText
+    private lateinit var clearSearchButton: ImageView
+    private lateinit var appIdTextView: android.widget.TextView
+    
+    private val qrScannerLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        try {
+            if (result.resultCode == RESULT_OK) {
+                val scanResult = result.data?.getStringExtra(QRScannerActivity.EXTRA_SCAN_RESULT)
+                scanResult?.let { qrCode ->
+                    Log.d("ScanActivity", "QR Code scanned: $qrCode")
+                    handleQRCodeResult(qrCode)
+                }
+            } else if (result.resultCode == RESULT_CANCELED) {
+                Log.d("ScanActivity", "QR scanner cancelled")
+            }
+        } catch (e: Exception) {
+            Log.e("ScanActivity", "Error handling QR scanner result", e)
+            Toast.makeText(this, "Error processing QR scan result", Toast.LENGTH_SHORT).show()
+        }
+    }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_scan_devices)
-        // Force dark status bar icons on light background across APIs
         WindowCompat.setDecorFitsSystemWindows(window, true)
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = true
         
@@ -41,14 +74,41 @@ class ScanActivity : AppCompatActivity() {
         setupClickListeners()
         observeViewModel()
         
-        // Start scanning automatically
         startScan()
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.scan_overflow_menu, menu)
+        return true
+    }
+
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        val authItem = menu.findItem(R.id.action_auth)
+        val isLoggedIn = AuthManager.getInstance(this).isLoggedIn()
+        authItem.title = if (isLoggedIn) "Logout" else "Login"
+        return super.onPrepareOptionsMenu(menu)
     }
     
     private fun setupUI() {
         recyclerView = findViewById(R.id.recyclerView)
         swipeRefreshLayout = findViewById(R.id.swipeRefreshLayout)
         swipeRefreshLayout.setOnRefreshListener { startScan() }
+        
+        searchEditText = findViewById(R.id.et_search)
+        clearSearchButton = findViewById(R.id.btn_clear_search)
+        
+        val footerLayout = findViewById<android.view.View>(R.id.scan_app_id_footer)
+        if (footerLayout != null) {
+            appIdTextView = footerLayout.findViewById(R.id.tv_scan_app_id)
+            if (appIdTextView != null) {
+                Log.d("ScanActivity", "App ID TextView found successfully")
+                updateAppIdFooter()
+            } else {
+                Log.e("ScanActivity", "Could not find tv_scan_app_id TextView")
+            }
+        } else {
+            Log.e("ScanActivity", "Could not find scan_app_id_footer layout")
+        }
     }
     
     private fun setupRecyclerView() {
@@ -61,12 +121,14 @@ class ScanActivity : AppCompatActivity() {
             },
             onDisconnectClick = { device ->
                 disconnectDevice(device)
+            },
+            onSettingsClick = { device ->
+                openDeviceSettings(device)
             }
         )
         
         recyclerView.layoutManager = LinearLayoutManager(this@ScanActivity)
         recyclerView.adapter = deviceAdapter
-        // Disable change animations to avoid pulsing/beating effect on frequent updates
         (recyclerView.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)?.apply {
             supportsChangeAnimations = false
             changeDuration = 0
@@ -77,13 +139,118 @@ class ScanActivity : AppCompatActivity() {
     }
     
     private fun setupClickListeners() {
-        // Scan functionality is now handled by floating button and swipe refresh
+        setupSearchFunctionality()
+        
+        findViewById<android.view.View>(R.id.btn_scan_qr).setOnClickListener {
+            launchQRScanner()
+        }
+        
+        // Kebab menu above the scan button
+        findViewById<ImageButton>(R.id.btn_kebab_menu)?.setOnClickListener { anchor ->
+            try {
+                val popup = PopupMenu(this, anchor)
+                popup.menuInflater.inflate(R.menu.scan_overflow_menu, popup.menu)
+                val isLoggedIn = AuthManager.getInstance(this).isLoggedIn()
+                popup.menu.findItem(R.id.action_auth)?.title = if (isLoggedIn) "Logout" else "Login"
+                popup.setOnMenuItemClickListener { item ->
+                    when (item.itemId) {
+                        R.id.action_auth -> {
+                            val authManager = AuthManager.getInstance(this)
+                            if (authManager.isLoggedIn()) {
+                                authManager.logout()
+                                popup.dismiss()
+                                anchor.post {
+                                    val intent = Intent(this, EntryActivity::class.java)
+                                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                    startActivity(intent)
+                                    finishAffinity()
+                                }
+                            } else {
+                                startActivity(Intent(this, SignInActivity::class.java))
+                            }
+                            true
+                        }
+                        else -> false
+                    }
+                }
+                popup.show()
+            } catch (e: Exception) {
+                Log.e("ScanActivity", "Error showing popup menu", e)
+                showError("Unable to open menu")
+            }
+        }
+    }
+    
+    private fun launchQRScanner() {
+        try {
+            Log.d("ScanActivity", "Launching QR scanner")
+            val intent = Intent(this, QRScannerActivity::class.java)
+            qrScannerLauncher.launch(intent)
+        } catch (e: Exception) {
+            Log.e("ScanActivity", "Error launching QR scanner", e)
+            Toast.makeText(this, "Error launching QR scanner", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    private fun handleQRCodeResult(qrCode: String) {
+        Log.d("ScanActivity", "Handling QR code result: $qrCode")
+        
+        searchEditText.setText(qrCode)
+        viewModel.setSearchQuery(qrCode)
+        updateClearButtonVisibility(true)
+        
+        parseQRCodeForDeviceInfo(qrCode)
+    }
+    
+    private fun parseQRCodeForDeviceInfo(qrCode: String) {
+        when {
+            qrCode.matches(Regex("^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$")) -> {
+                Log.d("ScanActivity", "QR code contains MAC address: $qrCode")
+            }
+            qrCode.length > 0 -> {
+                Log.d("ScanActivity", "QR code contains device info: $qrCode")
+            }
+        }
+    }
+    
+    private fun setupSearchFunctionality() {
+        Log.d("ScanActivity", "Setting up search functionality")
+        
+        searchEditText.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
+                Log.d("ScanActivity", "beforeTextChanged: '$s'")
+            }
+            
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                Log.d("ScanActivity", "onTextChanged: '$s'")
+            }
+            
+            override fun afterTextChanged(s: Editable?) {
+                val query = s?.toString() ?: ""
+                Log.d("ScanActivity", "afterTextChanged: '$query'")
+                viewModel.setSearchQuery(query)
+                updateClearButtonVisibility(query.isNotEmpty())
+            }
+        })
+        
+        clearSearchButton.setOnClickListener {
+            Log.d("ScanActivity", "Clear search clicked")
+            searchEditText.setText("")
+            viewModel.clearSearch()
+            updateClearButtonVisibility(false)
+        }
+        
+        updateClearButtonVisibility(false)
+    }
+    
+    private fun updateClearButtonVisibility(show: Boolean) {
+        clearSearchButton.visibility = if (show) View.VISIBLE else View.GONE
     }
     
     private fun observeViewModel() {
-        viewModel.discoveredDevices.observe(this) { devices ->
+        viewModel.filteredDevices.observe(this) { devices ->
+            Log.d("ScanActivity", "Filtered devices updated: ${devices.size} devices")
             deviceAdapter.updateDevices(devices)
-            // Show loader only if there exists any device without a valid temperature
             val shouldShowRefreshing = devices.isNotEmpty() && devices.any { it.temperature == null }
             swipeRefreshLayout.isRefreshing = shouldShowRefreshing
         }
@@ -111,16 +278,13 @@ class ScanActivity : AppCompatActivity() {
 
     
     private fun showDeviceDetails(device: DeviceInfo) {
-        // For now, directly connect or handle as needed
         connectToDevice(device)
     }
     
     private fun hideDeviceDetails() {
-        // no-op with simplified UI
     }
     
     private fun connectToDevice(device: DeviceInfo) {
-        // Navigate to device details screen
         val intent = Intent(this@ScanActivity, DeviceDetailsActivity::class.java)
         intent.putExtra(DeviceDetailsActivity.EXTRA_DEVICE_MAC, device.macAddress)
         startActivity(intent)
@@ -130,13 +294,42 @@ class ScanActivity : AppCompatActivity() {
         viewModel.disconnectDevice(device.macAddress)
     }
     
+    private fun openDeviceSettings(device: DeviceInfo) {
+        if (isConnectingToSettings) return
+        isConnectingToSettings = true
+        // Pre-connect with themed loader overlay, then navigate only on success
+        val mac = device.macAddress
+        val overlay = findViewById<android.view.View>(R.id.fl_connect_overlay)
+        overlay?.visibility = View.VISIBLE
+        // Stop scanning before connecting as per SDK docs
+        viewModel.stopScanning(this)
+        lifecycleScope.launch {
+            try {
+                val connected = kotlinx.coroutines.withTimeout(15000) {
+                    viewModel.connectToDevice(this@ScanActivity, mac, "minewtech1234567")
+                }
+                if (connected) {
+                    val intent = Intent(this@ScanActivity, DeviceSettingsActivity::class.java)
+                    intent.putExtra(DeviceSettingsActivity.EXTRA_DEVICE_MAC, mac)
+                    intent.putExtra(DeviceSettingsActivity.EXTRA_DEVICE_INFO, device)
+                    startActivity(intent)
+                } else {
+                    Toast.makeText(this@ScanActivity, "Failed to connect to device", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@ScanActivity, "Connection timed out or failed", Toast.LENGTH_LONG).show()
+            } finally {
+                overlay?.visibility = View.GONE
+                isConnectingToSettings = false
+            }
+        }
+    }
+    
     private fun showMenu() {
-        // TODO: Implement menu popup
         showError("Menu not implemented yet")
     }
     
     private fun showBeaconLogger() {
-        // TODO: Implement beacon logger
         showError("Beacon logger not implemented yet")
     }
     
@@ -144,6 +337,19 @@ class ScanActivity : AppCompatActivity() {
         return when (item.itemId) {
             android.R.id.home -> {
                 onBackPressed()
+                true
+            }
+            R.id.action_auth -> {
+                val authManager = AuthManager.getInstance(this)
+                if (authManager.isLoggedIn()) {
+                    authManager.logout()
+                    val intent = Intent(this, EntryActivity::class.java)
+                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                    startActivity(intent)
+                    finishAffinity()
+                } else {
+                    startActivity(Intent(this, SignInActivity::class.java))
+                }
                 true
             }
             else -> super.onOptionsItemSelected(item)
@@ -154,16 +360,30 @@ class ScanActivity : AppCompatActivity() {
         android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
     }
     
+    /**
+     * Updates the app ID footer with the actual installation ID.
+     */
+    private fun updateAppIdFooter() {
+        try {
+            val installationId = AppIdUtils.getInstallationId(this)
+            Log.d("ScanActivity", "Updating app ID footer with: $installationId")
+            appIdTextView.text = "App ID: $installationId"
+            Log.d("ScanActivity", "App ID footer updated successfully")
+        } catch (e: Exception) {
+            Log.e("ScanActivity", "Error updating app ID footer", e)
+            appIdTextView.text = "App ID: Error"
+        }
+    }
+    
     override fun onResume() {
         super.onResume()
-        // Resume scanning when returning to this activity
         Log.d("ScanActivity", "onResume: Resuming scanning")
         startScan()
+        invalidateOptionsMenu()
     }
     
     override fun onPause() {
         super.onPause()
-        // Stop scanning when leaving this activity
         Log.d("ScanActivity", "onPause: Stopping scanning")
         stopScan()
     }

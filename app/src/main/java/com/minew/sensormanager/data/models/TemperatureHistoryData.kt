@@ -3,7 +3,8 @@ package com.minew.sensormanager.data.models
 data class TemperatureDataPoint(
     val timestamp: Long,
     val temperature: Float,
-    val humidity: Float
+    val humidity: Float,
+    val macAddress: String? = null
 )
 
 data class ExcursionAnalysis(

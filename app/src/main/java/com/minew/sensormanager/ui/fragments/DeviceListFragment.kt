@@ -2,6 +2,8 @@ package com.minew.sensormanager.ui.fragments
 
 import android.content.Intent
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -12,6 +14,8 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.minew.sensormanager.databinding.FragmentDeviceListBinding
 import com.minew.sensormanager.ui.activities.ScanActivity
 import com.minew.sensormanager.ui.activities.DeviceDetailsActivity
+import com.minew.sensormanager.ui.activities.DeviceSettingsActivity
+import com.minew.sensormanager.R
 import com.minew.sensormanager.ui.adapters.DeviceListAdapter
 import com.minew.sensormanager.ui.viewmodels.MainViewModel
 import com.minew.sensormanager.data.models.DeviceInfo
@@ -32,12 +36,16 @@ class DeviceListFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
+        android.util.Log.d("DeviceListFragment", "onCreateView called")
         _binding = FragmentDeviceListBinding.inflate(inflater, container, false)
+        android.util.Log.d("DeviceListFragment", "Binding inflated successfully")
         return binding.root
     }
     
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        
+        android.util.Log.d("DeviceListFragment", "onViewCreated called")
         
         setupRecyclerView()
         setupClickListeners()
@@ -57,6 +65,9 @@ class DeviceListFragment : Fragment() {
             },
             onDisconnectClick = { device ->
                 disconnectDevice(device)
+            },
+            onSettingsClick = { device ->
+                openDeviceSettings(device)
             }
         )
         
@@ -67,9 +78,28 @@ class DeviceListFragment : Fragment() {
     }
     
     private fun setupClickListeners() {
+        android.util.Log.d("DeviceListFragment", "Setting up click listeners")
+        
+        try {
+            android.util.Log.d("DeviceListFragment", "Search container: ${binding.searchContainer}")
+            android.util.Log.d("DeviceListFragment", "Search edit text: ${binding.etSearch}")
+            android.util.Log.d("DeviceListFragment", "Search edit text visibility: ${binding.etSearch.visibility}")
+            android.util.Log.d("DeviceListFragment", "Search edit text is enabled: ${binding.etSearch.isEnabled}")
+            
+            // Test if we can set text to the search field
+            binding.etSearch.setText("test")
+            android.util.Log.d("DeviceListFragment", "Successfully set test text to search field")
+            
+        } catch (e: Exception) {
+            android.util.Log.e("DeviceListFragment", "Error accessing search elements", e)
+        }
+        
         binding.fabAddDevice.setOnClickListener {
             startActivity(Intent(requireContext(), ScanActivity::class.java))
         }
+        
+        // Setup search functionality
+        setupSearchFunctionality()
         
         // SwipeRefreshLayout will be implemented later
         // binding.swipeRefreshLayout.setOnRefreshListener {
@@ -77,9 +107,60 @@ class DeviceListFragment : Fragment() {
         // }
     }
     
+    private fun setupSearchFunctionality() {
+        android.util.Log.d("DeviceListFragment", "Setting up search functionality")
+        
+        try {
+            // Setup search text watcher
+            binding.etSearch.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
+                    android.util.Log.d("DeviceListFragment", "beforeTextChanged: '$s'")
+                }
+                
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    android.util.Log.d("DeviceListFragment", "onTextChanged: '$s'")
+                }
+                
+                override fun afterTextChanged(s: Editable?) {
+                    val query = s?.toString() ?: ""
+                    android.util.Log.d("DeviceListFragment", "afterTextChanged: '$query'")
+                    viewModel.setSearchQuery(query)
+                    updateClearButtonVisibility(query.isNotEmpty())
+                }
+            })
+            
+            // Setup clear button
+            binding.btnClearSearch.setOnClickListener {
+                android.util.Log.d("DeviceListFragment", "Clear search clicked")
+                binding.etSearch.setText("")
+                viewModel.clearSearch()
+                updateClearButtonVisibility(false)
+            }
+            
+            android.util.Log.d("DeviceListFragment", "Search functionality setup completed successfully")
+        } catch (e: Exception) {
+            android.util.Log.e("DeviceListFragment", "Error setting up search functionality", e)
+        }
+    }
+    
+    private fun updateClearButtonVisibility(show: Boolean) {
+        binding.btnClearSearch.visibility = if (show) View.VISIBLE else View.GONE
+    }
+    
+    private fun updateEmptyStateText(isSearching: Boolean) {
+        if (isSearching) {
+            binding.tvEmptyTitle.text = "No devices found"
+            binding.tvEmptySubtitle.text = "Try adjusting your search terms"
+        } else {
+            binding.tvEmptyTitle.text = getString(R.string.no_devices_found)
+            binding.tvEmptySubtitle.text = getString(R.string.scan_for_devices)
+        }
+    }
+    
     private fun observeViewModel() {
-        // Observe real-time discovered devices
-        viewModel.discoveredDevices.observe(viewLifecycleOwner) { devices ->
+        // Observe filtered devices (search results)
+        viewModel.filteredDevices.observe(viewLifecycleOwner) { devices ->
+            android.util.Log.d("DeviceListFragment", "Filtered devices updated: ${devices.size} devices")
             deviceAdapter.updateDevices(devices)
             
             // Show empty state if no devices
@@ -88,6 +169,12 @@ class DeviceListFragment : Fragment() {
             } else {
                 View.GONE
             }
+        }
+        
+        // Observe search query to update UI elements
+        viewModel.searchQuery.observe(viewLifecycleOwner) { query ->
+            updateEmptyStateText(query.isNotEmpty())
+            updateClearButtonVisibility(query.isNotEmpty())
         }
         
         viewModel.connectionStates.observe(viewLifecycleOwner) { states ->
@@ -109,6 +196,13 @@ class DeviceListFragment : Fragment() {
     
     private fun disconnectDevice(device: DeviceInfo) {
         viewModel.disconnectDevice(device.macAddress)
+    }
+    
+    private fun openDeviceSettings(device: DeviceInfo) {
+        val intent = Intent(requireContext(), DeviceSettingsActivity::class.java)
+        intent.putExtra(DeviceSettingsActivity.EXTRA_DEVICE_MAC, device.macAddress)
+        intent.putExtra(DeviceSettingsActivity.EXTRA_DEVICE_INFO, device)
+        startActivity(intent)
     }
     
     private fun startContinuousScanning() {

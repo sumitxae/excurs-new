@@ -22,6 +22,9 @@ import javax.inject.Singleton
 // Import Minew SDK classes
 import com.minew.ble.mst03.manager.MST03SensorBleManager
 import com.minew.ble.mst03.bean.MST03Entity
+import com.minew.ble.mst03.bean.HtSensorConfiguration
+import com.minew.ble.v3.bean.HTSensorThresholdConfig
+
 import com.minew.ble.v3.interfaces.OnScanDevicesResultListener
 import com.minew.ble.v3.enums.BleConnectionState
 import com.minew.ble.v3.enums.FrameType
@@ -672,9 +675,8 @@ class MinewBleManager @Inject constructor() {
                             append("Total Records: ${historyData.historyDataList?.size ?: 0}\n")
                             append("Data Points:\n")
                             historyData.historyDataList?.forEach { htData ->
-                                val timestamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
-                                    .format(java.util.Date(htData.timestamps))
-                                append("$timestamp: ${htData.temperature}°C\n")
+                                // Pass the raw HtData format for CSV generation
+                                append("$htData\n")
                             }
                         }.toString()
                         Log.d(TAG, "All temperature history result: $resultText")
@@ -709,6 +711,24 @@ class MinewBleManager @Inject constructor() {
         } catch (e: Exception) {
             Log.e(TAG, "Error querying light intensity configuration", e)
             "Error: ${e.message}"
+        }
+    }
+    
+    suspend fun getLightIntensityConfiguration(macAddress: String): com.minew.ble.mst03.bean.LightIntensitySensorConfiguration? {
+        return try {
+            Log.d(TAG, "Getting light intensity configuration for $macAddress")
+            return suspendCancellableCoroutine { continuation ->
+                mst03Manager.getLightIntensityConfiguration(macAddress) { isSuccessful, configResult ->
+                    if (isSuccessful && configResult != null) {
+                        continuation.resume(configResult)
+                    } else {
+                        continuation.resume(null)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting light intensity configuration", e)
+            null
         }
     }
     
@@ -751,6 +771,24 @@ class MinewBleManager @Inject constructor() {
         } catch (e: Exception) {
             Log.e(TAG, "Error getting device static info", e)
             "Error: ${e.message}"
+        }
+    }
+    
+    suspend fun queryHTSensorConfiguration(macAddress: String): HtSensorConfiguration? {
+        return try {
+            Log.d(TAG, "Querying HT sensor configuration for $macAddress")
+            return suspendCancellableCoroutine { continuation ->
+                mst03Manager.queryHTSensorConfiguration(macAddress) { isSuccessful, configResult ->
+                    if (isSuccessful && configResult != null) {
+                        continuation.resume(configResult)
+                    } else {
+                        continuation.resume(null)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error querying HT sensor configuration", e)
+            null
         }
     }
     
@@ -961,13 +999,24 @@ class MinewBleManager @Inject constructor() {
         macAddress: String,
         samplingInterval: Int,
         delay: Int,
-        htSettingData: List<Any> // Using Any for now since we don't have the exact class
+        htSettingData: List<HTSensorThresholdConfig>
     ): String {
         return try {
             Log.d(TAG, "Setting HT sensor configuration for $macAddress")
             return suspendCancellableCoroutine { continuation ->
-                // For now, return a placeholder since we need the exact SDK classes
-                continuation.resume("HT sensor configuration method requires exact SDK classes. Please implement with proper imports.")
+                val configuration = HtSensorConfiguration().apply {
+                    this.samplingInterval = samplingInterval
+                    this.delay = delay
+                    this.htSettingData = htSettingData
+                }
+                
+                mst03Manager.setHTSensorConfiguration(macAddress, configuration) { isSuccess ->
+                    if (isSuccess) {
+                        continuation.resume("HT sensor configuration set successfully")
+                    } else {
+                        continuation.resume("Failed to set HT sensor configuration")
+                    }
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error setting HT sensor configuration", e)

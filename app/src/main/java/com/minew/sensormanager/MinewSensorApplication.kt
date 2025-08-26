@@ -2,6 +2,7 @@ package com.minew.sensormanager
 
 import android.app.Application
 import android.util.Log
+import com.minew.sensormanager.utils.AppDownloadTracker
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
@@ -16,6 +17,9 @@ class MinewSensorApplication : Application() {
         
         // Set up global exception handler to catch SecurityExceptions
         setupGlobalExceptionHandler()
+        
+        // Initialize app download tracking
+        initializeAppDownloadTracking()
         
         // Initialize any global components here
         // For example: Crash reporting, Analytics, etc.
@@ -36,6 +40,31 @@ class MinewSensorApplication : Application() {
                     defaultHandler?.uncaughtException(thread, throwable)
                 }
             }
+        }
+    }
+    
+    /**
+     * Initializes app download tracking and logs installation information.
+     */
+    private fun initializeAppDownloadTracking() {
+        try {
+            val appDownloadTracker = AppDownloadTracker.getInstance(this)
+            
+            // Log installation information
+            appDownloadTracker.logDownloadInstance()
+            
+            // Log additional installation details
+            Log.i(TAG, "App Installation Details:")
+            Log.i(TAG, "Installation ID: ${appDownloadTracker.getInstallationId()}")
+            Log.i(TAG, "Is Fresh Installation: ${appDownloadTracker.isFreshInstallation()}")
+            Log.i(TAG, "App Version: ${appDownloadTracker.getAppVersion()}")
+            
+            if (appDownloadTracker.isFreshInstallation()) {
+                Log.i(TAG, "This is a fresh installation - first time the app is running")
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error initializing app download tracking", e)
         }
     }
 }

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Camera preview -->
+    <com.journeyapps.barcodescanner.BarcodeView
+        android:id="@+id/zxing_barcode_surface"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Required viewfinder view for DecoratedBarcodeView -->
+    <com.journeyapps.barcodescanner.ViewfinderView
+        android:id="@+id/zxing_viewfinder_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Scanning frame overlay -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#80000000" />
+
+    <!-- Scanning frame -->
+    <FrameLayout
+        android:layout_width="250dp"
+        android:layout_height="250dp"
+        android:layout_gravity="center">
+
+        <!-- Top-left corner -->
+        <View
+            android:layout_width="40dp"
+            android:layout_height="4dp"
+            android:layout_gravity="top|start"
+            android:background="@android:color/white" />
+
+        <View
+            android:layout_width="4dp"
+            android:layout_height="40dp"
+            android:layout_gravity="top|start"
+            android:background="@android:color/white" />
+
+        <!-- Top-right corner -->
+        <View
+            android:layout_width="40dp"
+            android:layout_height="4dp"
+            android:layout_gravity="top|end"
+            android:background="@android:color/white" />
+
+        <View
+            android:layout_width="4dp"
+            android:layout_height="40dp"
+            android:layout_gravity="top|end"
+            android:background="@android:color/white" />
+
+        <!-- Bottom-left corner -->
+        <View
+            android:layout_width="40dp"
+            android:layout_height="4dp"
+            android:layout_gravity="bottom|start"
+            android:background="@android:color/white" />
+
+        <View
+            android:layout_width="4dp"
+            android:layout_height="40dp"
+            android:layout_gravity="bottom|start"
+            android:background="@android:color/white" />
+
+        <!-- Bottom-right corner -->
+        <View
+            android:layout_width="40dp"
+            android:layout_height="4dp"
+            android:layout_gravity="bottom|end"
+            android:background="@android:color/white" />
+
+        <View
+            android:layout_width="4dp"
+            android:layout_height="40dp"
+            android:layout_gravity="bottom|end"
+            android:background="@android:color/white" />
+
+    </FrameLayout>
+
+</FrameLayout>

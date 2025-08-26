@@ -148,6 +148,12 @@ object TemperatureHistoryAnalyzer {
      * Parses a single temperature line
      */
     private fun parseTemperatureLine(line: String): TemperatureDataPoint? {
+        // Try to parse the new HtData format first
+        if (line.contains("HtData{") && line.contains("temperature=") && line.contains("timestamps=")) {
+            return parseHtDataFormat(line)
+        }
+        
+        // Fallback to the old format
         if (!line.contains("°C") || !line.contains(":")) return null
         
         val parts = line.split(":")
@@ -164,6 +170,43 @@ object TemperatureHistoryAnalyzer {
                     humidity = -128f // Humidity not available in this data
                 )
             }
+        }
+    }
+    
+    /**
+     * Parses the HtData format: HtData{macAddress=E7:EC:CC:3C:D3:60temperature=25.15, humidity=-128.0, timestamps=1755980948000}
+     */
+    private fun parseHtDataFormat(line: String): TemperatureDataPoint? {
+        return try {
+            // Extract MAC address
+            val macMatch = Regex("macAddress=([A-Fa-f0-9:]+)").find(line)
+            val macAddress = macMatch?.groupValues?.get(1)
+            
+            // Extract temperature value
+            val temperatureMatch = Regex("temperature=([\\d.-]+)").find(line)
+            val temperature = temperatureMatch?.groupValues?.get(1)?.toFloatOrNull()
+            
+            // Extract timestamp value
+            val timestampMatch = Regex("timestamps=(\\d+)").find(line)
+            val timestamp = timestampMatch?.groupValues?.get(1)?.toLongOrNull()
+            
+            // Extract humidity value
+            val humidityMatch = Regex("humidity=([\\d.-]+)").find(line)
+            val humidity = humidityMatch?.groupValues?.get(1)?.toFloatOrNull() ?: -128f
+            
+            if (temperature != null && timestamp != null) {
+                TemperatureDataPoint(
+                    timestamp = timestamp,
+                    temperature = temperature,
+                    humidity = humidity,
+                    macAddress = macAddress
+                )
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing HtData format: $line", e)
+            null
         }
     }
     

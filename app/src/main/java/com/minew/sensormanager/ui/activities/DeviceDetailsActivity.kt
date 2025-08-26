@@ -14,6 +14,8 @@ import com.minew.sensormanager.data.models.ConnectionState
 import com.minew.sensormanager.utils.TimestampConverter
 import com.minew.sensormanager.databinding.ActivityDeviceDetailsBinding
 import com.minew.sensormanager.ui.viewmodels.DeviceDetailsViewModel
+import com.minew.sensormanager.utils.AppIdUtils
+import com.minew.sensormanager.utils.CsvGenerator
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import com.github.mikephil.charting.charts.LineChart
@@ -35,6 +37,7 @@ class DeviceDetailsActivity : AppCompatActivity() {
     private var latestConnectionState: ConnectionState = ConnectionState.DISCONNECTED
     private var isAnalyzingTemperatureFlag: Boolean = false
     private var isAnalysisCompleted: Boolean = false
+    private lateinit var appIdTextView: android.widget.TextView
     
     companion object {
         const val EXTRA_DEVICE_MAC = "device_mac"
@@ -87,6 +90,20 @@ class DeviceDetailsActivity : AppCompatActivity() {
         
         // Setup the temperature graph
         setupTemperatureGraph()
+        
+        // Setup app ID footer
+        val footerLayout = findViewById<android.view.View>(R.id.scan_app_id_footer)
+        if (footerLayout != null) {
+            appIdTextView = footerLayout.findViewById(R.id.tv_scan_app_id)
+            if (appIdTextView != null) {
+                android.util.Log.d("DeviceDetailsActivity", "App ID TextView found successfully")
+                updateAppIdFooter()
+            } else {
+                android.util.Log.e("DeviceDetailsActivity", "Could not find tv_scan_app_id TextView")
+            }
+        } else {
+            android.util.Log.e("DeviceDetailsActivity", "Could not find scan_app_id_footer layout")
+        }
     }
     
     private fun setupTemperatureGraph() {
@@ -474,6 +491,9 @@ class DeviceDetailsActivity : AppCompatActivity() {
             // Plot the temperature graph
             plotTemperatureGraph(analysis)
             
+            // Generate CSV file with historical data
+            generateCsvFromHistoricalData(analysis)
+            
             binding.tvTemperatureHistory.visibility = View.VISIBLE
             binding.tvGraphPlaceholder.visibility = View.GONE
             isAnalysisCompleted = true
@@ -529,6 +549,64 @@ class DeviceDetailsActivity : AppCompatActivity() {
             .setNegativeButton("Close", null)
             .create()
         dialog.show()
+    }
+    
+    /**
+     * Updates the app ID footer with the actual installation ID.
+     */
+    private fun updateAppIdFooter() {
+        try {
+            val installationId = AppIdUtils.getInstallationId(this)
+            appIdTextView.text = "App ID: $installationId"
+        } catch (e: Exception) {
+            android.util.Log.e("DeviceDetailsActivity", "Error updating app ID footer", e)
+            appIdTextView.text = "App ID: Error"
+        }
+    }
+    
+    /**
+     * Generates CSV file from temperature historical data
+     */
+    private fun generateCsvFromHistoricalData(analysis: com.minew.sensormanager.data.models.TemperatureHistoryAnalysis) {
+        try {
+            android.util.Log.d("DeviceDetailsActivity", "Starting CSV generation with ${analysis.allDataPoints.size} data points")
+            
+            val deviceMac = intent.getStringExtra(EXTRA_DEVICE_MAC)
+            if (deviceMac != null && analysis.allDataPoints.isNotEmpty()) {
+                android.util.Log.d("DeviceDetailsActivity", "Device MAC: $deviceMac")
+                
+                val csvFile = CsvGenerator.generateTemperatureCsv(
+                    context = this,
+                    deviceMac = deviceMac,
+                    dataPoints = analysis.allDataPoints
+                )
+                
+                csvFile?.let {
+                    android.util.Log.d("DeviceDetailsActivity", "CSV file generated successfully: ${it.absolutePath}")
+                    android.widget.Toast.makeText(
+                        this,
+                        "CSV file saved to Downloads: ${it.name}",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                } ?: run {
+                    android.util.Log.e("DeviceDetailsActivity", "Failed to generate CSV file")
+                    android.widget.Toast.makeText(
+                        this,
+                        "Failed to generate CSV file. Check storage permissions.",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            } else {
+                android.util.Log.w("DeviceDetailsActivity", "No device MAC or data points available for CSV generation")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("DeviceDetailsActivity", "Error generating CSV file", e)
+            android.widget.Toast.makeText(
+                this,
+                "Error generating CSV file: ${e.message}",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        }
     }
     
 

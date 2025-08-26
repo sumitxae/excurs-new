@@ -27,6 +27,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    
+    <!-- Camera Permission for QR Scanner -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <!-- Hardware Features -->
     <uses-feature
@@ -38,14 +42,16 @@
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
+        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.CCPExcursionReader"
         tools:targetApi="31">
 
-        <!-- Main Activity -->
+        <!-- Entry Activity (New Launcher) -->
         <activity
-            android:name=".ui.activities.MainActivity"
+            android:name=".ui.activities.EntryActivity"
             android:exported="true"
             android:theme="@style/Theme.CCPExcursionReader">
             <intent-filter>
@@ -53,6 +59,32 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Main Activity -->
+        <activity
+            android:name=".ui.activities.MainActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CCPExcursionReader" />
+
+        <!-- Sign In Activity -->
+        <activity
+            android:name=".ui.activities.SignInActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CCPExcursionReader" />
+
+        <!-- Auth Activities -->
+        <activity
+            android:name=".ui.activities.ForgotPasswordActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CCPExcursionReader" />
+        <activity
+            android:name=".ui.activities.VerifyOtpActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CCPExcursionReader" />
+        <activity
+            android:name=".ui.activities.ResetPasswordActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CCPExcursionReader" />
 
         <!-- Scan Activity -->
         <activity
@@ -87,6 +119,19 @@
             android:name=".ui.activities.SettingsActivity"
             android:exported="false"
             android:parentActivityName=".ui.activities.MainActivity" />
+
+        <!-- QR Scanner Activity -->
+        <activity
+            android:name=".ui.activities.QRScannerActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.activities.ScanActivity"
+            android:screenOrientation="portrait" />
+
+        <!-- Device Settings Activity -->
+        <activity
+            android:name=".ui.activities.DeviceSettingsActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.activities.ScanActivity" />
 
         <!-- Services will be added later when properly implemented -->
 
