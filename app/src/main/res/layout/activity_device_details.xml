@@ -196,7 +196,8 @@
                                 android:layout_height="wrap_content"
                                 android:text="Loading..."
                                 android:textColor="@color/text_secondary"
-                                android:textSize="14sp" />
+                                android:textSize="14sp"
+                                android:textStyle="bold"  />
 
                         </LinearLayout>
 
