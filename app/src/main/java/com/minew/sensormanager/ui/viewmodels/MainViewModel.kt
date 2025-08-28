@@ -258,7 +258,7 @@ class MainViewModel @Inject constructor(
         } else {
             devices.filter { device ->
                 val matchesMac = device.macAddress.contains(query, ignoreCase = true)
-                val matchesName = device.name?.contains(query, ignoreCase = true) == true
+                val matchesName = device.name.contains(query, ignoreCase = true)
                 val matchesTemp = (device.temperature?.toString()?.contains(query) == true)
                 
                 Log.d("MainViewModel", "Device ${device.macAddress}: mac=$matchesMac, name=$matchesName, temp=$matchesTemp")
@@ -266,7 +266,25 @@ class MainViewModel @Inject constructor(
                 matchesMac || matchesName || matchesTemp
             }
         }
-        _filteredDevices.value = filtered
-        Log.d("MainViewModel", "Search query: '$query', Filtered ${filtered.size} devices from ${devices.size}")
+        
+        // Sort devices: alert state (excursion) devices first, then normal devices
+        val sortedDevices = filtered.sortedWith(compareByDescending<DeviceInfo> { device ->
+            // Check if device is in excursion state (temperature < 2°C or > 8°C)
+            val temp = device.temperature
+            if (temp != null && !temp.isNaN()) {
+                temp < 2.0f || temp > 8.0f
+            } else {
+                false
+            }
+        }.thenBy { device ->
+            // Secondary sort by temperature (higher temperatures first within each group)
+            device.temperature ?: Float.NEGATIVE_INFINITY
+        }.thenBy { device ->
+            // Tertiary sort by MAC address for consistent ordering
+            device.macAddress
+        })
+        
+        _filteredDevices.value = sortedDevices
+        Log.d("MainViewModel", "Search query: '$query', Filtered and sorted ${sortedDevices.size} devices from ${devices.size}")
     }
 }

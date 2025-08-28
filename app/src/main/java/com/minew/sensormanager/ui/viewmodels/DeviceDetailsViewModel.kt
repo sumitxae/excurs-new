@@ -18,7 +18,7 @@ import com.minew.sensormanager.utils.TimestampConverter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.launch
-
+import com.minew.ble.mst03.bean.HtData;
 @HiltViewModel
 class DeviceDetailsViewModel
 @Inject
@@ -106,7 +106,7 @@ constructor(
 
                     val historyData = bleManager.queryAllTemperatureHistory(macAddress = macAddress)
 
-                    _temperatureHistoryData.value = historyData
+                    _temperatureHistoryData.value = "Records: ${historyData.size}"
                     Log.d(
                             "DeviceDetailsViewModel",
                             "Temperature history data received: $historyData"
@@ -121,7 +121,7 @@ constructor(
         }
     }
 
-    private fun analyzeTemperatureHistory(rawHistoryData: String) {
+    private fun analyzeTemperatureHistory(rawHistoryData: List<HtData>) {
         try {
             Log.d("DeviceDetailsViewModel", "Analyzing temperature history data...")
 

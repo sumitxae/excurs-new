@@ -31,6 +31,39 @@
     <string name="need_permission_continue">APP needs following permissions to continue</string>
     <string name="allow_permission_in_settings">Please allow following permissions in settings</string>
     
+    <!-- Permission Dialog Strings -->
+    <string name="permission_bluetooth_title">Bluetooth Permission Required</string>
+    <string name="permission_bluetooth_message">Bluetooth permission is needed for scanning.</string>
+    
+    <string name="permission_location_title">Location Permission Required</string>
+    <string name="permission_location_message">Location permission is required for scanning to work properly.</string>
+    
+    <string name="permission_camera_title">Camera Permission Required</string>
+    <string name="permission_camera_message">Camera permission is needed to scan QR codes.</string>
+    
+    <string name="permission_microphone_title">Microphone Permission Required</string>
+    <string name="permission_microphone_message">Microphone permission is needed for voice commands and audio recording features.</string>
+    
+    <string name="permission_storage_title">Storage Permission Required</string>
+    <string name="permission_storage_message">Storage permission is needed to export reports.</string>
+    
+    <string name="permission_notifications_title">Notification Permission Required</string>
+    <string name="permission_notifications_message">Notification permission allows the app to alert you about important sensor readings and device status changes.</string>
+    
+    <string name="permission_phone_title">Phone Permission Required</string>
+    <string name="permission_phone_message">Phone permission is needed to identify your device and provide personalized services.</string>
+    
+    <string name="permission_contacts_title">Contacts Permission Required</string>
+    <string name="permission_contacts_message">Contacts permission is needed to share sensor data and reports with your contacts.</string>
+    
+    <string name="permission_generic_title">Permission Required</string>
+    <string name="permission_generic_message">This permission is required for the app to function properly.</string>
+    
+    <string name="btn_grant_permission">Grant</string>
+    <string name="btn_open_settings">Open Settings</string>
+    <string name="btn_enable_service">Enable Service</string>
+    <string name="btn_cancel">Cancel</string>
+    
     <!-- Device Details Activity -->
     <string name="device_details">Device Details</string>
     <string name="device_information">Device Information</string>
@@ -61,8 +94,7 @@
     <string name="low_temperature_thresholds">Low Temperature Thresholds</string>
     <string name="save_settings">Save Settings</string>
     <string name="reset_to_defaults">Reset to Defaults</string>
-    <string name="check_for_updates">Check for Updates</string>
-    <string name="checking_for_updates">Checking for updates...</string>
+    <string name="update_device">Update Device</string>
     <string name="device_settings">Device Settings</string>
     <string name="back">Back</string>
 </resources>

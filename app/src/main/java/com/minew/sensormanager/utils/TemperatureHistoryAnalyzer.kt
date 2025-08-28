@@ -7,6 +7,7 @@ import com.minew.sensormanager.data.models.TemperatureHistoryAnalysis
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.abs
+import com.minew.ble.mst03.bean.HtData;
 
 object TemperatureHistoryAnalyzer {
     private const val TAG = "TemperatureHistoryAnalyzer"
@@ -22,26 +23,23 @@ object TemperatureHistoryAnalyzer {
      * Analyzes temperature history data to detect excursion events
      */
     fun analyzeTemperatureHistory(
-        rawHistoryData: String,
+        rawHistoryData: List<HtData>,
         deviceTempEventTimestamp: Long?
     ): TemperatureHistoryAnalysis {
         return try {
-            logAnalysisStart(deviceTempEventTimestamp, rawHistoryData.length)
-            
-            val dataPoints = parseTemperatureHistoryData(rawHistoryData).takeIf { it.isNotEmpty() }
-                ?: return createEmptyAnalysis().also { Log.w(TAG, "No temperature data points found") }
-            
-            val sortedDataPoints = dataPoints.sortedBy { it.timestamp }
-            logHistoricalData(sortedDataPoints)
-            
+            if (rawHistoryData.isEmpty()) {
+                Log.w(TAG, "No temperature data points found")
+                return createEmptyAnalysis()
+            }
+            val sortedDataPoints = rawHistoryData.sortedBy { it.timestamps }
             val excursionAnalysis = detectExcursionStart(sortedDataPoints, deviceTempEventTimestamp)
             
             TemperatureHistoryAnalysis(
                 allDataPoints = sortedDataPoints,
                 excursionAnalysis = excursionAnalysis,
                 totalDataPoints = sortedDataPoints.size,
-                timeRangeStart = sortedDataPoints.first().timestamp,
-                timeRangeEnd = sortedDataPoints.last().timestamp
+                timeRangeStart = sortedDataPoints.first().timestamps,
+                timeRangeEnd = sortedDataPoints.last().timestamps
             )
             
         } catch (e: Exception) {
@@ -54,15 +52,11 @@ object TemperatureHistoryAnalyzer {
      * Detects the excursion start point by analyzing temperature data
      */
     private fun detectExcursionStart(
-        dataPoints: List<TemperatureDataPoint>,
+        dataPoints: List<HtData>,
         deviceTempEventTimestamp: Long?
     ): ExcursionAnalysis {
         return try {
-            Log.d(TAG, "=== DETECTING EXCURSION START ===")
-            Log.d(TAG, "Total data points: ${dataPoints.size}")
-            
             val excursionStartPoint = findExcursionStartPoint(dataPoints)
-            logExcursionDetectionResult(excursionStartPoint, deviceTempEventTimestamp)
             
             excursionStartPoint?.let { startPoint ->
                 createExcursionAnalysis(startPoint, dataPoints, deviceTempEventTimestamp)
@@ -78,165 +72,50 @@ object TemperatureHistoryAnalyzer {
      * Finds the most recent excursion start point by going backwards from current time
      * and finding the last normal temperature before the current excursion
      */
-    private fun findExcursionStartPoint(dataPoints: List<TemperatureDataPoint>): TemperatureDataPoint? {
-        Log.d(TAG, "Finding most recent excursion start point from ${dataPoints.size} data points")
+    private fun findExcursionStartPoint(dataPoints: List<HtData>): HtData? {
         
-        // Check if all temperatures are in excursion state
         if (dataPoints.all { !it.isNormalTemperature() }) {
-            Log.d(TAG, "ALL temperatures are in excursion state - using oldest record as excursion start")
-            return dataPoints.first().also {
-                Log.d(TAG, "Excursion start (all excursion case): ${it.temperature}°C at ${it.formattedTimestamp()}")
-            }
+            return dataPoints.first()
         }
         
-        // Find excursion start by looking backwards from the most recent data
         for (i in dataPoints.indices.reversed()) {
             val currentPoint = dataPoints[i]
-            Log.d(TAG, "Checking point $i: ${currentPoint.temperature}°C at ${currentPoint.formattedTimestamp()}")
             
             if (!currentPoint.isNormalTemperature()) {
-                Log.d(TAG, "Found excursion temperature: ${currentPoint.temperature}°C at ${currentPoint.formattedTimestamp()}")
                 
-                // Look backwards to find the last normal temperature before this excursion
                 val lastNormalIndex = (i - 1 downTo 0).find { j ->
                     val previousPoint = dataPoints[j]
-                    Log.d(TAG, "Looking backwards at point $j: ${previousPoint.temperature}°C at ${previousPoint.formattedTimestamp()}")
                     previousPoint.isNormalTemperature()
                 }
                 
                 return if (lastNormalIndex != null && lastNormalIndex + 1 < dataPoints.size) {
-                    dataPoints[lastNormalIndex + 1].also { excursionStart ->
-                        Log.d(TAG, "Excursion start point (after last normal): ${excursionStart.temperature}°C at ${excursionStart.formattedTimestamp()}")
-                    }
+                    dataPoints[lastNormalIndex + 1]
                 } else {
-                    // No normal temperature found before this excursion point
-                    Log.d(TAG, "No normal temperature found before this excursion point, using oldest record as excursion start")
-                    dataPoints.first().also {
-                        Log.d(TAG, "Excursion start (no normal found): ${it.temperature}°C at ${it.formattedTimestamp()}")
-                    }
+                    dataPoints.first()
                 }
             }
         }
         
-        Log.d(TAG, "No excursion detected - all temperatures are within normal range")
         return null
-    }
-    
-    /**
-     * Parses the raw temperature history data string to extract data points
-     */
-    private fun parseTemperatureHistoryData(rawData: String): List<TemperatureDataPoint> {
-        val dataPoints = mutableListOf<TemperatureDataPoint>()
-        
-        try {
-            rawData.lines().forEach { line ->
-                parseTemperatureLine(line)?.let { dataPoint ->
-                    dataPoints.add(dataPoint)
-                }
-            }
-            
-            Log.d(TAG, "Parsed ${dataPoints.size} temperature data points")
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Error parsing temperature history data", e)
-        }
-        
-        return dataPoints
-    }
-    
-    /**
-     * Parses a single temperature line
-     */
-    private fun parseTemperatureLine(line: String): TemperatureDataPoint? {
-        // Try to parse the new HtData format first
-        if (line.contains("HtData{") && line.contains("temperature=") && line.contains("timestamps=")) {
-            return parseHtDataFormat(line)
-        }
-        
-        // Fallback to the old format
-        if (!line.contains("°C") || !line.contains(":")) return null
-        
-        val parts = line.split(":")
-        if (parts.size < 4) return null
-        
-        val dateTime = "${parts[0]}:${parts[1]}:${parts[2]}"
-        val temperature = parts[3].trim().removeSuffix("°C").trim().toFloatOrNull()
-        
-        return temperature?.let { temp ->
-            parseDateTime(dateTime)?.let { timestamp ->
-                TemperatureDataPoint(
-                    timestamp = timestamp,
-                    temperature = temp,
-                    humidity = -128f // Humidity not available in this data
-                )
-            }
-        }
-    }
-    
-    /**
-     * Parses the HtData format: HtData{macAddress=E7:EC:CC:3C:D3:60temperature=25.15, humidity=-128.0, timestamps=1755980948000}
-     */
-    private fun parseHtDataFormat(line: String): TemperatureDataPoint? {
-        return try {
-            // Extract MAC address
-            val macMatch = Regex("macAddress=([A-Fa-f0-9:]+)").find(line)
-            val macAddress = macMatch?.groupValues?.get(1)
-            
-            // Extract temperature value
-            val temperatureMatch = Regex("temperature=([\\d.-]+)").find(line)
-            val temperature = temperatureMatch?.groupValues?.get(1)?.toFloatOrNull()
-            
-            // Extract timestamp value
-            val timestampMatch = Regex("timestamps=(\\d+)").find(line)
-            val timestamp = timestampMatch?.groupValues?.get(1)?.toLongOrNull()
-            
-            // Extract humidity value
-            val humidityMatch = Regex("humidity=([\\d.-]+)").find(line)
-            val humidity = humidityMatch?.groupValues?.get(1)?.toFloatOrNull() ?: -128f
-            
-            if (temperature != null && timestamp != null) {
-                TemperatureDataPoint(
-                    timestamp = timestamp,
-                    temperature = temperature,
-                    humidity = humidity,
-                    macAddress = macAddress
-                )
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error parsing HtData format: $line", e)
-            null
-        }
     }
     
     /**
      * Creates excursion analysis when excursion is detected
      */
     private fun createExcursionAnalysis(
-        startPoint: TemperatureDataPoint,
-        dataPoints: List<TemperatureDataPoint>,
+        startPoint: HtData,
+        dataPoints: List<HtData>,
         deviceTempEventTimestamp: Long?
     ): ExcursionAnalysis {
-        Log.d(TAG, "Excursion start point found at: ${startPoint.formattedTimestamp()}")
-        Log.d(TAG, "Excursion start temperature: ${startPoint.temperature}°C")
-        
-        // Get all data points from the last normal temperature point onwards
-        val lastNormalIndex = dataPoints.indexOfFirst { it.timestamp >= startPoint.timestamp } - 1
+        val lastNormalIndex = dataPoints.indexOfFirst { it.timestamps >= startPoint.timestamps } - 1
         val graphStartIndex = maxOf(0, lastNormalIndex)
         val excursionDataPoints = dataPoints.drop(graphStartIndex)
         
-        Log.d(TAG, "Graph will show data from index $graphStartIndex onwards (${excursionDataPoints.size} points)")
-        excursionDataPoints.firstOrNull()?.let { firstPoint ->
-            Log.d(TAG, "First point in graph: ${firstPoint.temperature}°C at ${firstPoint.formattedTimestamp()}")
-        }
-        
         // Calculate excursion duration
-        val excursionDuration = (deviceTempEventTimestamp ?: System.currentTimeMillis()) - startPoint.timestamp
-        Log.d(TAG, "Excursion duration: ${excursionDuration / 1000} seconds")
+        val excursionDuration = (deviceTempEventTimestamp ?: System.currentTimeMillis()) - startPoint.timestamps
         
         return ExcursionAnalysis(
-            excursionStartTime = startPoint.timestamp,
+            excursionStartTime = startPoint.timestamps,
             excursionStartTemperature = startPoint.temperature,
             excursionDuration = excursionDuration,
             excursionDataPoints = excursionDataPoints,
@@ -250,7 +129,6 @@ object TemperatureHistoryAnalyzer {
      * Creates analysis when no excursion is detected
      */
     private fun createNormalRangeAnalysis(): ExcursionAnalysis {
-        Log.d(TAG, "No excursion detected - temperature is within normal range")
         return ExcursionAnalysis(
             excursionStartTime = null,
             excursionStartTemperature = null,
@@ -274,13 +152,13 @@ object TemperatureHistoryAnalyzer {
     /**
      * Logs historical temperature data
      */
-    private fun logHistoricalData(dataPoints: List<TemperatureDataPoint>) {
+    private fun logHistoricalData(dataPoints: List<HtData>) {
         Log.d(TAG, "Parsed ${dataPoints.size} temperature data points")
         Log.d(TAG, "=== FULL HISTORICAL TEMPERATURE DATA ===")
         
         dataPoints.forEachIndexed { index, point ->
             val status = if (point.isNormalTemperature()) "NORMAL" else "EXCURSION"
-            Log.d(TAG, "Point $index: ${point.temperature}°C at ${point.formattedTimestamp()} [$status]")
+            Log.d(TAG, "Point $index: ${point.temperature}°C at ${point.timestamps} [$status]")
         }
         
         Log.d(TAG, "=== END FULL HISTORICAL DATA ===")
@@ -290,7 +168,7 @@ object TemperatureHistoryAnalyzer {
      * Logs excursion detection results
      */
     private fun logExcursionDetectionResult(
-        excursionStartPoint: TemperatureDataPoint?,
+        excursionStartPoint: HtData?,
         deviceTempEventTimestamp: Long?
     ) {
         Log.d(TAG, "=== EXCURSION DETECTION RESULT ===")
@@ -298,15 +176,15 @@ object TemperatureHistoryAnalyzer {
         excursionStartPoint?.let { point ->
             Log.d(TAG, "EXCURSION START FOUND:")
             Log.d(TAG, "  - Temperature: ${point.temperature}°C")
-            Log.d(TAG, "  - Timestamp: ${point.formattedTimestamp()}")
-            Log.d(TAG, "  - Raw timestamp: ${point.timestamp}")
+            Log.d(TAG, "  - Timestamp: ${point.timestamps}")
+            Log.d(TAG, "  - Raw timestamp: ${point.timestamps}")
             
             deviceTempEventTimestamp?.let { deviceTimestamp ->
                 Log.d(TAG, "DEVICE TEMP EVENT TIMESTAMP:")
                 Log.d(TAG, "  - Device timestamp: ${formatTimestamp(deviceTimestamp)}")
                 Log.d(TAG, "  - Raw device timestamp: $deviceTimestamp")
                 
-                val timeDiff = abs(point.timestamp - deviceTimestamp)
+                val timeDiff = abs(point.timestamps - deviceTimestamp)
                 Log.d(TAG, "  - Time difference: ${timeDiff}ms (${timeDiff / 1000}s)")
             }
         } ?: Log.d(TAG, "NO EXCURSION START FOUND")
@@ -361,9 +239,9 @@ object TemperatureHistoryAnalyzer {
 }
 
 // Extension functions to improve readability and reduce code duplication
-private fun TemperatureDataPoint.isNormalTemperature(): Boolean {
-    return temperature >= TemperatureHistoryAnalyzer.NORMAL_TEMP_MIN && 
-           temperature <= TemperatureHistoryAnalyzer.NORMAL_TEMP_MAX
+private fun HtData.isNormalTemperature(): Boolean {
+    return this.temperature >= TemperatureHistoryAnalyzer.NORMAL_TEMP_MIN && 
+           this.temperature <= TemperatureHistoryAnalyzer.NORMAL_TEMP_MAX
 }
 
 private fun TemperatureDataPoint.formattedTimestamp(): String {

@@ -38,6 +38,9 @@ class EntryActivity : AppCompatActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, true)
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = true
         
+        // Request all runtime permissions (including Storage) on startup
+        requestAllRuntimePermissionsOnStartup()
+
         setupClickListeners()
         updateAppIdFooter()
     }
@@ -66,6 +69,16 @@ class EntryActivity : AppCompatActivity() {
                 } else {
                     showPermissionRequiredMessage()
                 }
+            }
+    }
+
+    private fun requestAllRuntimePermissionsOnStartup() {
+        val permissions = PermissionHelper.getRequiredPermissions()
+        PermissionX.init(this)
+            .permissions(permissions)
+            .explainReasonBeforeRequest()
+            .request { _, _, _ ->
+                // No-op: this is just to surface the dialogs at startup
             }
     }
     
@@ -139,7 +152,7 @@ class EntryActivity : AppCompatActivity() {
     }
     
     private fun showPermissionRequiredMessage() {
-        showError("Required permissions must be granted to use this app. Please go to Settings > Apps > ${getString(R.string.app_name)} > Permissions and grant Bluetooth and Location permissions.")
+        showError("Required permissions must be granted to use this app. Please go to Settings > Apps > ${getString(R.string.app_name)} > Permissions and grant Bluetooth, Location, and Camera permissions.")
     }
     
     private fun showError(message: String) {

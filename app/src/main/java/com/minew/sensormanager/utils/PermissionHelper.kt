@@ -22,18 +22,8 @@ object PermissionHelper {
                 Manifest.permission.BLUETOOTH_ADMIN
             ))
         }
-        
-        // Location permissions (required for BLE scanning)
-        permissions.addAll(listOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ))
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            permissions.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-        }
-        
-        // Storage permissions
+
+        // Storage permissions (request these BEFORE location as per requirement)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.addAll(listOf(
                 Manifest.permission.READ_MEDIA_AUDIO,
@@ -46,6 +36,19 @@ object PermissionHelper {
                 Manifest.permission.WRITE_EXTERNAL_STORAGE
             ))
         }
+
+        // Location permissions (required for BLE scanning)
+        permissions.addAll(listOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ))
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            permissions.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        }
+        
+        // Camera permission (required for QR scanning)
+        permissions.add(Manifest.permission.CAMERA)
         
         return permissions
     }
@@ -86,6 +89,10 @@ object PermissionHelper {
         }
     }
     
+    fun hasCameraPermission(context: android.content.Context): Boolean {
+        return context.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+    
     fun canPerformBleOperations(context: android.content.Context): Boolean {
         return hasBluetoothPermissions(context) && hasLocationPermissions(context)
     }
@@ -108,6 +115,7 @@ object PermissionHelper {
                     android.Manifest.permission.BLUETOOTH_ADMIN -> "Bluetooth Admin"
                     android.Manifest.permission.ACCESS_FINE_LOCATION -> "Location"
                     android.Manifest.permission.ACCESS_COARSE_LOCATION -> "Location"
+                    android.Manifest.permission.CAMERA -> "Camera"
                     else -> permission
                 }
             }.distinct()

@@ -17,6 +17,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.minew.sensormanager.ui.base.BasePermissionActivity
+import com.minew.sensormanager.permissions.PermissionType
+import com.minew.sensormanager.permissions.PermissionDialogType
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -33,7 +36,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
-class ScanActivity : AppCompatActivity() {
+class ScanActivity : BasePermissionActivity() {
     
     private val viewModel: MainViewModel by viewModels()
     private lateinit var deviceAdapter: DeviceListAdapter
@@ -73,8 +76,26 @@ class ScanActivity : AppCompatActivity() {
         setupRecyclerView()
         setupClickListeners()
         observeViewModel()
-        
+    }
+    
+    override fun onAllPermissionsGranted() {
+        super.onAllPermissionsGranted()
+        Log.d("ScanActivity", "All permissions granted - starting scan")
+        // Start scanning only when permissions are granted
         startScan()
+    }
+    
+    override fun onPermissionFlowComplete() {
+        super.onPermissionFlowComplete()
+        Log.d("ScanActivity", "Permission flow completed - starting scan")
+        // Start scanning even if some permissions are missing (reduced functionality)
+        startScan()
+    }
+    
+    override fun onCriticalPermissionMissing(missingPermissions: List<PermissionType>) {
+        super.onCriticalPermissionMissing(missingPermissions)
+        Log.d("ScanActivity", "Critical permissions missing: $missingPermissions")
+        // You can show a custom message here if needed
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -143,6 +164,12 @@ class ScanActivity : AppCompatActivity() {
         
         findViewById<android.view.View>(R.id.btn_scan_qr).setOnClickListener {
             launchQRScanner()
+        }
+        
+        // Test permission dialog - remove this after testing
+        findViewById<android.view.View>(R.id.btn_scan_qr)?.setOnLongClickListener {
+            testPermissionDialog()
+            true
         }
         
         // Kebab menu above the scan button
@@ -251,7 +278,7 @@ class ScanActivity : AppCompatActivity() {
         viewModel.filteredDevices.observe(this) { devices ->
             Log.d("ScanActivity", "Filtered devices updated: ${devices.size} devices")
             deviceAdapter.updateDevices(devices)
-            val shouldShowRefreshing = devices.isNotEmpty() && devices.any { it.temperature == null }
+            val shouldShowRefreshing = devices.isEmpty()
             swipeRefreshLayout.isRefreshing = shouldShowRefreshing
         }
         
@@ -305,7 +332,7 @@ class ScanActivity : AppCompatActivity() {
         viewModel.stopScanning(this)
         lifecycleScope.launch {
             try {
-                val connected = kotlinx.coroutines.withTimeout(15000) {
+                val connected = kotlinx.coroutines.withTimeout(30000) {
                     viewModel.connectToDevice(this@ScanActivity, mac, "minewtech1234567")
                 }
                 if (connected) {
@@ -358,6 +385,27 @@ class ScanActivity : AppCompatActivity() {
     
     private fun showError(message: String) {
         android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+    }
+    
+    // Test function to manually show permission dialog
+    private fun testPermissionDialog() {
+        Log.d("ScanActivity", "Showing test permission dialog for BLUETOOTH")
+        val dialog = com.minew.sensormanager.ui.dialogs.PermissionDialogFragment.newInstance(
+            PermissionType.BLUETOOTH,
+            PermissionDialogType.INITIAL_REQUEST
+        )
+        
+        dialog.setOnPrimaryButtonClickListener {
+            Log.d("ScanActivity", "Primary button clicked")
+            android.widget.Toast.makeText(this, "Primary button clicked", android.widget.Toast.LENGTH_SHORT).show()
+        }
+        
+        dialog.setOnSecondaryButtonClickListener {
+            Log.d("ScanActivity", "Secondary button clicked")
+            android.widget.Toast.makeText(this, "Secondary button clicked", android.widget.Toast.LENGTH_SHORT).show()
+        }
+        
+        dialog.show(supportFragmentManager, "test_permission_dialog")
     }
     
     /**

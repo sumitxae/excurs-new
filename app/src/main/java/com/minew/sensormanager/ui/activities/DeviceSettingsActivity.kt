@@ -21,6 +21,13 @@ import com.minew.sensormanager.utils.AppIdUtils
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.result.contract.ActivityResultContracts
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
+import java.util.zip.ZipInputStream
 
 @AndroidEntryPoint
 class DeviceSettingsActivity : AppCompatActivity() {
@@ -42,11 +49,13 @@ class DeviceSettingsActivity : AppCompatActivity() {
     private lateinit var switchTemp1Enabled: SwitchCompat
     private lateinit var switchTemp2Enabled: SwitchCompat
     private lateinit var btnSaveSettings: Button
-    private lateinit var btnUpgradeFirmware: Button
+    private lateinit var btnUpdateDevice: Button
     private lateinit var tvCurrentFirmware: TextView
-    private lateinit var tvFirmwareStatus: TextView
-    // Connection UI removed from layout; connect silently
     private lateinit var btnResetDefaults: Button
+    private val pickOtaZipLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri == null) return@registerForActivityResult
+        handleSelectedOtaZip(uri)
+    }
     
     private var deviceMac: String = ""
     private var deviceInfo: DeviceInfo? = null
@@ -77,9 +86,8 @@ class DeviceSettingsActivity : AppCompatActivity() {
         switchTemp1Enabled = findViewById(R.id.switch_temp1_enabled)
         switchTemp2Enabled = findViewById(R.id.switch_temp2_enabled)
         btnSaveSettings = findViewById(R.id.btn_save_settings)
-        btnUpgradeFirmware = findViewById(R.id.btn_check_updates)
+        btnUpdateDevice = findViewById(R.id.btn_update_device)
         tvCurrentFirmware = findViewById(R.id.tv_current_firmware)
-        tvFirmwareStatus = findViewById(R.id.tv_firmware_status)
         btnResetDefaults = findViewById(R.id.btn_reset_defaults)
     }
     
@@ -96,8 +104,9 @@ class DeviceSettingsActivity : AppCompatActivity() {
             viewModel.saveSettings()
         }
         
-        btnUpgradeFirmware.setOnClickListener {
-            viewModel.checkForFirmwareUpdates()
+        btnUpdateDevice.setOnClickListener {
+            // Launch file picker for OTA zip
+            pickOtaZipLauncher.launch(arrayOf("application/zip", "application/octet-stream", "application/x-zip-compressed"))
         }
         
         btnResetDefaults.setOnClickListener {
@@ -207,6 +216,114 @@ class DeviceSettingsActivity : AppCompatActivity() {
     private fun hideLoadingDialog() {
         // Hide loading dialog implementation
     }
+
+    private fun handleSelectedOtaZip(fileUri: Uri) {
+        try {
+            val fileName = queryDisplayName(fileUri) ?: "firmware.zip"
+            val tempZip = copyUriToCache(fileUri, fileName)
+            if (tempZip == null) {
+                Toast.makeText(this, "File selection error", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val verified = try { viewModel.verifyOtaFile(tempZip.absolutePath) } catch (_: Exception) { false }
+            if (!verified) {
+                Toast.makeText(this, "Invalid OTA file", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val binData = extractBinFromZip(tempZip)
+            if (binData == null) {
+                Toast.makeText(this, "Unable to read firmware bin", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            // Kick off upgrade using dfuTarget = 0 as per SDK doc when isLinkUpgrade=false
+            btnUpdateDevice.isEnabled = false
+            viewModel.firmwareUpgrade(
+                dfuTarget = 0,
+                fileByte = binData,
+                progressCallBack = { progress ->
+                    btnUpdateDevice.text = "Upgrading... ${progress}%"
+                },
+                successCallBack = {
+                    btnUpdateDevice.isEnabled = true
+                    btnUpdateDevice.text = "Upgrade Firmware"
+                    Toast.makeText(this, "Firmware upgrade successful", Toast.LENGTH_SHORT).show()
+                },
+                failCallBack = {
+                    btnUpdateDevice.isEnabled = true
+                    btnUpdateDevice.text = "Upgrade Firmware"
+                    Toast.makeText(this, "Firmware upgrade failed", Toast.LENGTH_SHORT).show()
+                }
+            )
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling selected OTA zip", e)
+            Toast.makeText(this, "File selection error", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun queryDisplayName(uri: Uri): String? {
+        return try {
+            contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (index != -1) cursor.getString(index) else null
+                } else null
+            }
+        } catch (_: Exception) { null }
+    }
+
+    private fun copyUriToCache(uri: Uri, fileName: String): File? {
+        return try {
+            val sanitized = fileName.ifBlank { "firmware.zip" }
+            val outFile = File(cacheDir, sanitized)
+            contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(outFile).use { output ->
+                    copyStream(input, output)
+                }
+            }
+            outFile
+        } catch (e: Exception) {
+            Log.e(TAG, "copyUriToCache error", e)
+            null
+        }
+    }
+
+    private fun copyStream(input: InputStream, output: java.io.OutputStream) {
+        val buffer = ByteArray(8 * 1024)
+        while (true) {
+            val read = input.read(buffer)
+            if (read == -1) break
+            output.write(buffer, 0, read)
+        }
+    }
+
+    private fun extractBinFromZip(zipFile: File): ByteArray? {
+        return try {
+            ZipInputStream(zipFile.inputStream()).use { zis ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    if (!entry.isDirectory && entry.name.endsWith(".bin", ignoreCase = true)) {
+                        val baos = java.io.ByteArrayOutputStream()
+                        val buffer = ByteArray(8 * 1024)
+                        while (true) {
+                            val read = zis.read(buffer)
+                            if (read == -1) break
+                            baos.write(buffer, 0, read)
+                        }
+                        return baos.toByteArray()
+                    }
+                    entry = zis.nextEntry
+                }
+            }
+            null
+        } catch (e: Exception) {
+            Log.e(TAG, "extractBinFromZip error", e)
+            null
+        }
+    }
     
     private fun setupViewModelObservers() {
         lifecycleScope.launch {
@@ -265,7 +382,7 @@ class DeviceSettingsActivity : AppCompatActivity() {
             // Observe loading state
             viewModel.isLoading.collect { isLoading ->
                 btnSaveSettings.isEnabled = !isLoading
-                btnUpgradeFirmware.isEnabled = !isLoading
+                btnUpdateDevice.isEnabled = !isLoading
             }
         }
         
@@ -280,8 +397,8 @@ class DeviceSettingsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             // Observe firmware checking state
             viewModel.isCheckingFirmware.collect { isChecking ->
-                btnUpgradeFirmware.text = if (isChecking) "Checking..." else "Check for Updates"
-                btnUpgradeFirmware.isEnabled = !isChecking
+                btnUpdateDevice.text = if (isChecking) "Upgrading..." else "Upgrade Firmware"
+                btnUpdateDevice.isEnabled = !isChecking
             }
         }
         
@@ -289,7 +406,7 @@ class DeviceSettingsActivity : AppCompatActivity() {
             // Observe loading state
             viewModel.isLoading.collect { isLoading ->
                 btnSaveSettings.isEnabled = !isLoading
-                btnUpgradeFirmware.isEnabled = !isLoading
+                btnUpdateDevice.isEnabled = !isLoading
                 
                 if (isLoading) {
                     btnSaveSettings.text = "Loading..."
@@ -303,7 +420,7 @@ class DeviceSettingsActivity : AppCompatActivity() {
             // Observe saving state
             viewModel.isSaving.collect { isSaving ->
                 btnSaveSettings.isEnabled = !isSaving
-                btnUpgradeFirmware.isEnabled = !isSaving
+                btnUpdateDevice.isEnabled = !isSaving
                 
                 if (isSaving) {
                     btnSaveSettings.text = "Saving..."
@@ -316,12 +433,12 @@ class DeviceSettingsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             // Observe firmware checking state
             viewModel.isCheckingFirmware.collect { isChecking ->
-                btnUpgradeFirmware.isEnabled = !isChecking
+                btnUpdateDevice.isEnabled = !isChecking
                 
                 if (isChecking) {
-                    btnUpgradeFirmware.text = "Checking..."
+                    btnUpdateDevice.text = "Upgrading..."
                 } else {
-                    btnUpgradeFirmware.text = "Check for Updates"
+                    btnUpdateDevice.text = "Upgrade Firmware"
                 }
             }
         }

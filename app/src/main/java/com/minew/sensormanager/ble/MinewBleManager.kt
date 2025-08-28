@@ -31,8 +31,10 @@ import com.minew.ble.v3.enums.FrameType
 import com.minew.ble.mst03.frames.CombinationFrame
 import com.minew.ble.mst03.frames.DeviceStaticInfoFrame
 import com.minew.ble.mst03.interfaces.OnReceiveDataListener
+import com.minew.ble.v3.interfaces.OnFirmwareUpgradeListener
 import com.minew.sensormanager.utils.PermissionHelper
 import com.minew.sensormanager.utils.BluetoothHelper
+import com.minew.ble.mst03.bean.HtData;
 
 @Singleton
 class MinewBleManager @Inject constructor() {
@@ -589,110 +591,22 @@ class MinewBleManager @Inject constructor() {
         }
     }
     
-    suspend fun queryTemperatureHistory(macAddress: String): String {
-        return try {
-            Log.d(TAG, "Querying temperature history for $macAddress")
-            return suspendCancellableCoroutine { continuation ->
-                val systemTime = System.currentTimeMillis() / 1000
-                val startTime = (systemTime - 60 * 60 * 24) / 1000 // Last 24 hours
-                val endTime = systemTime
-                val rules = 1 // Get data for specific time period
-                
-                Log.d(TAG, "Calling SDK with params: rules=$rules, startTime=$startTime, endTime=$endTime, systemTime=$systemTime")
-                
-                mst03Manager.queryTemperatureHistoryData(macAddress, rules, startTime, endTime, systemTime) { result, historyData ->
-                    Log.d(TAG, "=== RAW SDK RESPONSE - TEMPERATURE HISTORY ===")
-                    Log.d(TAG, "SDK Callback Result: $result")
-                    Log.d(TAG, "SDK Callback HistoryData Object: $historyData")
-                    if (historyData != null) {
-                        Log.d(TAG, "HistoryData.historyDataList: ${historyData.historyDataList}")
-                        Log.d(TAG, "HistoryData.historyDataList Size: ${historyData.historyDataList?.size}")
-                        historyData.historyDataList?.forEachIndexed { index, htData ->
-                            Log.d(TAG, "Raw HtData[$index]: $htData")
-                            Log.d(TAG, "  - timestamps: ${htData.timestamps}")
-                            Log.d(TAG, "  - temperature: ${htData.temperature}")
-                            Log.d(TAG, "  - humidity: ${htData.humidity}")
-                        }
-                    }
-                    Log.d(TAG, "=== END RAW SDK RESPONSE ===")
-                    
-                    if (result && historyData != null) {
-                        Log.d(TAG, "Temperature history data received: ${historyData.historyDataList?.size ?: 0} records")
-                        val resultText = StringBuilder().apply {
-                            append("Temperature History (Last 24 hours):\n")
-                            append("Raw SDK Response: $historyData\n")
-                            append("Data Records: ${historyData.historyDataList?.size ?: 0}\n")
-                            historyData.historyDataList?.forEach { htData ->
-                                val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
-                                    .format(java.util.Date(htData.timestamps))
-                                    append(htData)
-                            }
-                        }.toString()
-                        Log.d(TAG, "Temperature history result: $resultText")
-                        continuation.resume(resultText)
-                    } else {
-                        Log.w(TAG, "No temperature history data available - result: $result, data: $historyData")
-                        continuation.resume("No temperature history data available")
-                    }
+    suspend fun queryAllTemperatureHistory(macAddress: String): List<HtData> =
+        suspendCancellableCoroutine { cont ->
+            val systemTimeSec = System.currentTimeMillis() / 1000
+            val rules = 0 // get all data
+
+            mst03Manager.queryTemperatureHistoryData(macAddress, rules, 0, 0, systemTimeSec) { result, historyData ->
+                if (!cont.isActive) return@queryTemperatureHistoryData
+
+                if (result && historyData?.historyDataList != null) {
+                    cont.resume(historyData.historyDataList)
+                } else {
+                    cont.resume(emptyList())
                 }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error querying temperature history", e)
-            "Error: ${e.message}"
         }
     }
-    
-    suspend fun queryAllTemperatureHistory(macAddress: String): String {
-        return try {
-            Log.d(TAG, "Querying ALL temperature history for $macAddress")
-            
-            return suspendCancellableCoroutine { continuation ->
-                val systemTime = System.currentTimeMillis() / 1000
-                val rules = 0 // Get all data
-                
-                Log.d(TAG, "Calling SDK with params: rules=$rules, systemTime=$systemTime")
-                
-                mst03Manager.queryTemperatureHistoryData(macAddress, rules, 0, 0, systemTime) { result, historyData ->
-                    Log.d(TAG, "=== RAW SDK RESPONSE - ALL TEMPERATURE HISTORY ===")
-                    Log.d(TAG, "SDK Callback Result: $result")
-                    Log.d(TAG, "SDK Callback HistoryData Object: $historyData")
-                    if (historyData != null) {
-                        Log.d(TAG, "HistoryData.historyDataList: ${historyData.historyDataList}")
-                        Log.d(TAG, "HistoryData.historyDataList Size: ${historyData.historyDataList?.size}")
-                        historyData.historyDataList?.forEachIndexed { index, htData ->
-                            Log.d(TAG, "Raw HtData[$index]: $htData")
-                            Log.d(TAG, "  - timestamps: ${htData.timestamps}")
-                            Log.d(TAG, "  - temperature: ${htData.temperature}")
-                            Log.d(TAG, "  - humidity: ${htData.humidity}")
-                        }
-                    }
-                    Log.d(TAG, "=== END RAW SDK RESPONSE ===")
-                    
-                    if (result && historyData != null) {
-                        Log.d(TAG, "All temperature history data received: ${historyData.historyDataList?.size ?: 0} records")
-                        val resultText = StringBuilder().apply {
-                            append("All Temperature History Data:\n")
-                            append("Total Records: ${historyData.historyDataList?.size ?: 0}\n")
-                            append("Data Points:\n")
-                            historyData.historyDataList?.forEach { htData ->
-                                // Pass the raw HtData format for CSV generation
-                                append("$htData\n")
-                            }
-                        }.toString()
-                        Log.d(TAG, "All temperature history result: $resultText")
-                        continuation.resume(resultText)
-                    } else {
-                        Log.w(TAG, "No temperature history data available - result: $result, data: $historyData")
-                        continuation.resume("No temperature history data available")
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error querying all temperature history", e)
-            "Error: ${e.message}"
-        }
-    }
-    
+
     suspend fun queryLightIntensityConfiguration(macAddress: String): String {
         return try {
             Log.d(TAG, "Querying light intensity configuration for $macAddress")
@@ -801,28 +715,11 @@ class MinewBleManager @Inject constructor() {
                 val endTime = systemTime
                 val rules = 1 // Get data for specific time period
                 
-                Log.d(TAG, "Calling light history SDK with params: rules=$rules, startTime=$startTime, endTime=$endTime, systemTime=$systemTime")
-                
                 mst03Manager.queryLightHistoryData(macAddress, rules, startTime, endTime, systemTime) { result, historyData ->
-                    Log.d(TAG, "=== RAW SDK RESPONSE - LIGHT HISTORY ===")
-                    Log.d(TAG, "SDK Callback Result: $result")
-                    Log.d(TAG, "SDK Callback HistoryData Object: $historyData")
-                    if (historyData != null) {
-                        Log.d(TAG, "HistoryData.historyDataList: ${historyData.historyDataList}")
-                        Log.d(TAG, "HistoryData.historyDataList Size: ${historyData.historyDataList?.size}")
-                        historyData.historyDataList?.forEachIndexed { index, lightData ->
-                            Log.d(TAG, "Raw LightData[$index]: $lightData")
-                            Log.d(TAG, "  - timestamps: ${lightData.timestamps}")
-                            Log.d(TAG, "  - lightIntensity: ${lightData.lightIntensity}")
-                            Log.d(TAG, "  - alarmType: ${lightData.alarmType}")
-                        }
-                    }
-                    Log.d(TAG, "=== END RAW SDK RESPONSE ===")
-                    
                     if (result && historyData != null) {
                         Log.d(TAG, "Light history data received: ${historyData.historyDataList?.size ?: 0} records")
                         val resultText = StringBuilder().apply {
-                            historyData.historyDataList?.forEach { lightData ->
+                        historyData.historyDataList?.forEach { lightData ->
                                 val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
                                     .format(java.util.Date(lightData.timestamps))
                                 append(lightData)
@@ -889,14 +786,47 @@ class MinewBleManager @Inject constructor() {
         }
     }
     
-    suspend fun firmwareUpgrade(macAddress: String): String {
+    fun verifyOtaFile(zipFilePath: String): Boolean {
         return try {
-            Log.d(TAG, "Starting firmware upgrade for $macAddress")
-            // TODO: Implement actual firmware upgrade using SDK
-            "Firmware upgrade process started. Please wait for completion."
+            mst03Manager.verifyOtaFile(zipFilePath)
         } catch (e: Exception) {
-            Log.e(TAG, "Error starting firmware upgrade", e)
-            "Error: ${e.message}"
+            Log.e(TAG, "Error verifying OTA file: $zipFilePath", e)
+            false
+        }
+    }
+
+    fun firmwareUpgrade(
+        macAddress: String,
+        dfuTarget: Int,
+        upgradeData: ByteArray,
+        progressCallBack: (progress: Int) -> Unit,
+        successCallBack: () -> Unit,
+        failCallBack: () -> Unit
+    ) {
+        try {
+            Log.d(TAG, "Starting firmware upgrade for $macAddress, dfuTarget=$dfuTarget, size=${upgradeData.size}")
+            mst03Manager.firmwareUpgrade(
+                macAddress,
+                false,
+                dfuTarget,
+                upgradeData,
+                object : OnFirmwareUpgradeListener {
+                    override fun updateProgress(progress: Int) {
+                        progressCallBack(progress)
+                    }
+
+                    override fun upgradeSuccess() {
+                        successCallBack()
+                    }
+
+                    override fun upgradeFailed() {
+                        failCallBack()
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting firmware upgrade for $macAddress", e)
+            failCallBack()
         }
     }
     

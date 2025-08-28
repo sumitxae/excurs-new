@@ -10,7 +10,7 @@
     <color name="text_primary">#000000</color>
     <color name="text_secondary">#C7C7CD</color>
     <color name="border">#D1D5DB</color>
-    <color name="primary_light">#26EF652B</color>
+    <color name="primary_light">#FFB599</color>
     <color name="success">#10B981</color>
     <color name="status_connected">#10B981</color>
     <color name="status_connecting">#F59E0B</color>

@@ -65,6 +65,22 @@ class DeviceListAdapter(
 
                 val connectionState = connectionStates[device.macAddress] ?: device.connectionState
                 updateConnectionStatus(connectionState)
+                
+                // Set background color based on alert state
+                val isInAlertState = device.temperature != null && !device.temperature.isNaN() && 
+                    (device.temperature > 8.0f || device.temperature < 2.0f)
+                
+                if (isInAlertState) {
+                    // Subtle red background for alert devices
+                    root.setCardBackgroundColor(itemView.context.getColor(R.color.error_background))
+                    // Increase elevation for alert devices to make them more prominent
+                    root.cardElevation = 8f
+                } else {
+                    // Normal white background
+                    root.setCardBackgroundColor(itemView.context.getColor(R.color.card_background))
+                    // Normal elevation
+                    root.cardElevation = 3f
+                }
 
                 // Show settings button only for admin users
                 val authManager = AuthManager.getInstance(itemView.context)
@@ -80,9 +96,8 @@ class DeviceListAdapter(
                 }
 
                 // Show Connect button only when device is in excursion state (2°C <= temp <= 8°C)
-                val tempValue = device.temperature
-                val isInExcursionState = tempValue != null && !tempValue.isNaN() && 
-                    (tempValue > 8.0f || tempValue < 2.0f)
+                val isInExcursionState = device.temperature != null && !device.temperature.isNaN() && 
+                    (device.temperature > 8.0f || device.temperature < 2.0f)
                 
                 if (isInExcursionState) {
                     btnConnect.visibility = View.VISIBLE
@@ -94,19 +109,14 @@ class DeviceListAdapter(
                     btnConnect.visibility = View.GONE
                 }
 
-                // Tap card to toggle frame info expansion; long-press preserves external click
-                // behavior
+                // Tap card to toggle frame info expansion
                 root.setOnClickListener { toggleExpansion(device.macAddress, adapterPosition) }
-                root.setOnLongClickListener {
-                    onDeviceClick(device)
-                    true
-                }
 
                 // Frame display controlled by BuildConfig flag
                 val frameView = root.findViewById<TextView>(R.id.tv_frame_info)
                 if (frameView != null) {
                     val isExpanded = expandedItems.contains(device.macAddress)
-                    if (BuildConfig.SHOW_FRAMES_IN_SCAN && isExpanded) {
+                    if (BuildConfig.DEV_MODE && isExpanded) {
                         frameView.visibility = View.VISIBLE
                         val parts = mutableListOf<String>()
                         device.staticFrameData?.let { parts.add(it) }
@@ -134,21 +144,22 @@ class DeviceListAdapter(
         }
 
         private fun updateConnectionStatus(state: ConnectionState) {
+            // Note: state parameter is kept for future use but currently using temperature-based status
             // First check temperature-based status
             val tempValue = getItem(adapterPosition).temperature
             if (tempValue != null && !tempValue.isNaN()) {
                 if (tempValue > 8.0f || tempValue < 2.0f) {
                     binding.tvStatusBadge.text = "ALERT"
-                    binding.tvStatusBadge.setTextColor(android.graphics.Color.parseColor("#FF4B4B"))
+                    binding.tvStatusBadge.setTextColor(itemView.context.getColor(R.color.error))
                     binding.tvStatusBadge.setBackgroundResource(R.drawable.bg_status_badge_alert)
                 } else if (tempValue <= 8.0f && tempValue >= 2.0f) {
                     binding.tvStatusBadge.text = "NORMAL"
-                    binding.tvStatusBadge.setTextColor(android.graphics.Color.parseColor("#1BC47D"))
+                    binding.tvStatusBadge.setTextColor(itemView.context.getColor(R.color.success))
                     binding.tvStatusBadge.setBackgroundResource(R.drawable.bg_status_badge_normal)
                 }
             } else {
-                binding.tvStatusBadge.text = "N/A"
-                binding.tvStatusBadge.setTextColor(android.graphics.Color.parseColor("#D94F24"))
+                binding.tvStatusBadge.text = "--"
+                binding.tvStatusBadge.setTextColor(itemView.context.getColor(R.color.primary_hover))
                 binding.tvStatusBadge.setBackgroundResource(R.drawable.bg_status_badge_alert)
             }
         }

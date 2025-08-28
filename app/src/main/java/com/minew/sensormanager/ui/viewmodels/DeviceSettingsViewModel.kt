@@ -275,14 +275,57 @@ class DeviceSettingsViewModel @Inject constructor(
         _message.value = null
     }
     
+    // ===== Firmware Upgrade (per SDK_Doc.md) =====
+    fun verifyOtaFile(zipFilePath: String): Boolean {
+        return try {
+            bleManager.verifyOtaFile(zipFilePath)
+        } catch (e: Exception) {
+            Log.e(TAG, "verifyOtaFile error", e)
+            false
+        }
+    }
+
+    fun firmwareUpgrade(
+        dfuTarget: Int,
+        fileByte: ByteArray,
+        progressCallBack: (progress: Int) -> Unit,
+        successCallBack: () -> Unit,
+        failCallBack: () -> Unit
+    ) {
+        val mac = currentDeviceMac
+        if (mac.isNullOrEmpty()) {
+            _message.value = "No device selected for upgrade"
+            failCallBack()
+            return
+        }
+
+        if (!bleManager.isDeviceConnected(mac)) {
+            _message.value = "Device not connected. Connect before upgrading."
+            failCallBack()
+            return
+        }
+
+        // Delegate to BLE manager
+        bleManager.firmwareUpgrade(
+            mac,
+            dfuTarget,
+            fileByte,
+            progressCallBack,
+            successCallBack,
+            failCallBack
+        )
+    }
+
     fun resetToDefaults() {
         _temp1Enabled.value = true
-        _temp1Min.value = 20.0f
-        _temp1Max.value = 50.0f
+        _temp1Min.value = 23.0f
+        _temp1Max.value = 25.0f
         _temp2Enabled.value = true
         _temp2Min.value = 2.0f
         _temp2Max.value = 8.0f
-        _message.value = "Settings reset to defaults"
+        _message.value = "Settings reset to defaults. Saving..."
+        // Persist defaults and navigate back on success
+        saveSettings()
     }
     
     fun isDeviceConnected(): Boolean {

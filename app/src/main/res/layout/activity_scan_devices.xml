@@ -339,7 +339,6 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Connecting..."
                     android:textColor="@color/text_secondary"
                     android:textSize="14sp" />
             </LinearLayout>
@@ -379,13 +378,13 @@
                 android:layout_height="48dp"
                 android:indeterminateTint="@color/primary" />
 
-            <TextView
+            <!-- <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Connecting..."
                 android:textColor="@color/text_secondary"
                 android:textSize="14sp"
-                android:layout_marginTop="12dp" />
+                android:layout_marginTop="12dp" /> -->
         </LinearLayout>
     </FrameLayout>
 
