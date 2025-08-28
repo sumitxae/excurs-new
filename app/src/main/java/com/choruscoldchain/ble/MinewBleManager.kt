@@ -738,6 +738,71 @@ class MinewBleManager @Inject constructor() {
             "Error: ${e.message}"
         }
     }
+
+    /**
+     * Query the light intensity history for the last [seconds] seconds.
+     * Returns Pair<lightIntensity, timestampMs> or null when no data.
+     */
+    suspend fun queryRecentLightIntensity(macAddress: String, seconds: Int = 60): Pair<Int, Long>? =
+        suspendCancellableCoroutine { cont ->
+            val systemTimeSec = System.currentTimeMillis() / 1000
+            val endTimeSec = systemTimeSec
+            val startTimeSec = systemTimeSec - seconds
+            val rules = 1 // time range
+
+            mst03Manager.queryLightHistoryData(macAddress, rules, startTimeSec, endTimeSec, systemTimeSec) { result, historyData ->
+                if (!cont.isActive) return@queryLightHistoryData
+
+                
+                val list = historyData?.historyDataList
+                if (result && list != null && list.isNotEmpty()) {
+                    val latest = list.maxByOrNull { data -> data.timestamps }
+                    latest?.let { cont.resume(Pair(it.lightIntensity, it.timestamps)) } ?: cont.resume(null)
+                } else {
+                    if (seconds < 300) {
+                        val extendedStartTime = systemTimeSec - 300
+                        mst03Manager.queryLightHistoryData(macAddress, rules, extendedStartTime, endTimeSec, systemTimeSec) { extendedResult, extendedHistoryData ->
+                            if (!cont.isActive) return@queryLightHistoryData
+                            val extendedList = extendedHistoryData?.historyDataList
+                            if (extendedResult && extendedList != null && extendedList.isNotEmpty()) {
+                                val latest = extendedList.maxByOrNull { data -> data.timestamps }
+                                latest?.let { cont.resume(Pair(it.lightIntensity, it.timestamps)) } ?: cont.resume(null)
+                            } else {
+                                cont.resume(null)
+                            }
+                        }
+                    } else {
+                        cont.resume(null)
+                    }
+                }
+            }
+        }
+    
+    /**
+     * Query all available light intensity history data.
+     * Returns the latest light intensity reading or null when no data.
+     */
+    suspend fun queryAllLightHistory(macAddress: String): Pair<Int, Long>? =
+        suspendCancellableCoroutine { cont ->
+            val systemTimeSec = System.currentTimeMillis() / 1000
+            val endTimeSec = systemTimeSec
+            val startTimeSec = 0L // Query from the beginning
+            val rules = 1 // time range
+
+
+            mst03Manager.queryLightHistoryData(macAddress, rules, startTimeSec, endTimeSec, systemTimeSec) { result, historyData ->
+                if (!cont.isActive) return@queryLightHistoryData
+
+                
+                val list = historyData?.historyDataList
+                if (result && list != null && list.isNotEmpty()) {
+                    val latest = list.maxByOrNull { data -> data.timestamps }
+                    latest?.let { cont.resume(Pair(it.lightIntensity, it.timestamps)) } ?: cont.resume(null)
+                } else {
+                    cont.resume(null)
+                }
+            }
+        }
     
     suspend fun resetDevice(macAddress: String): String {
         return try {

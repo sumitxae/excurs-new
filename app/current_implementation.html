@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Temperature Monitoring Application - Feature Documentation</title>
+    <style>
+        @media print {
+            body { margin: 0; }
+            .page-break { page-break-before: always; }
+            .no-print { display: none; }
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20mm;
+            background: white;
+        }
+        
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #2c5aa0;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #2c5aa0;
+            font-size: 2.2em;
+            margin: 0;
+            font-weight: 300;
+        }
+        
+        .header .subtitle {
+            color: #666;
+            font-size: 1.1em;
+            margin-top: 10px;
+        }
+        
+        .meta-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-left: 4px solid #2c5aa0;
+        }
+        
+        .meta-info div {
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .section {
+            margin-bottom: 35px;
+        }
+        
+        .section h2 {
+            color: #2c5aa0;
+            font-size: 1.5em;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .feature-card {
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background: #fafbfc;
+        }
+        
+        .feature-card h3 {
+            color: #2c5aa0;
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+        
+        .feature-list {
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        .feature-list li {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+        
+        .sub-feature {
+            margin-top: 8px;
+            padding-left: 15px;
+            font-size: 0.95em;
+            color: #555;
+        }
+        
+        .highlight {
+            background: #fff3cd;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+        
+        .admin-only {
+            background: #e7f3ff;
+            border-left: 4px solid #0066cc;
+            padding: 10px 15px;
+            margin: 10px 0;
+            border-radius: 0 5px 5px 0;
+        }
+        
+        .admin-only::before {
+            content: "👤 Admin Only: ";
+            font-weight: bold;
+            color: #0066cc;
+        }
+        
+        .temperature-range {
+            background: #fff5f5;
+            border: 1px solid #fed7d7;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-weight: bold;
+            color: #c53030;
+        }
+        
+        .overview {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        
+        .overview h2 {
+            color: white;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+            margin-top: 0;
+        }
+        
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #e9ecef;
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .toc {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        
+        .toc h3 {
+            margin-top: 0;
+            color: #2c5aa0;
+        }
+        
+        .toc ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .toc li {
+            padding: 5px 0;
+            border-bottom: 1px dotted #ddd;
+        }
+        
+        .toc li:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Chorus Gather Hub</h1>
+    </div>
+    
+    
+    <div class="overview">
+        <h2>Application Overview</h2>
+        <p>This document outlines the comprehensive features implemented in the Chorus Gather Hub. The system provides role-based access control with specialized functionality for both administrative users and standard users, enabling efficient monitoring and management of temperature-sensitive beacon devices.</p>
+    </div>
+    
+    <div class="toc">
+        <h3>Table of Contents</h3>
+        <ul>
+            <li>1. User Role Management</li>
+            <li>2. Device Scanning & Monitoring</li>
+            <li>3. Device Details & Analytics</li>
+            <li>4. Administrative Configuration</li>
+        </ul>
+    </div>
+    
+    <div class="section">
+        <h2>1. User Role Management</h2>
+        
+        <div class="feature-card">
+            <h3>Choose Roles Screen</h3>
+            <p>The application provides role-based access control with two distinct user types:</p>
+            
+            <ul class="feature-list">
+                <li><strong>Admin User Access</strong>
+                    <div class="sub-feature">
+                        • Device configuration facility for administrative users<br>
+                        • Authentication required for secure access<br>
+                        • Full system privileges including device settings management
+                    </div>
+                </li>
+                
+                <li><strong>Standard User Access</strong>
+                    <div class="sub-feature">
+                        • Direct access to Gather Hub for non-administrative users<br>
+                        • Streamlined interface focused on monitoring capabilities<br>
+                        • No authentication barriers for quick device monitoring
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>2. Device Scanning & Monitoring</h2>
+        
+        <div class="feature-card">
+            <h3>Scan Screen - Main Dashboard</h3>
+            <p>The central hub for device discovery and status monitoring with comprehensive filtering capabilities:</p>
+            
+            <ul class="feature-list">
+                <li><strong>Device Discovery</strong>
+                    <div class="sub-feature">
+                        • Automatic detection of all devices in vicinity<br>
+                        • Real-time display of device status and metrics
+                    </div>
+                </li>
+                
+                <li><strong>Device Information Display</strong>
+                    <div class="sub-feature">
+                        • <span class="highlight">MAC ID</span> - Unique device identifier<br>
+                        • <span class="highlight">Status</span> - Alert, Normal, or (---)<br>
+                        • <span class="highlight">Temperature</span> - Current temperature readings
+                    </div>
+                </li>
+                
+                <li><strong>Search & Filter Capabilities</strong>
+                    <div class="sub-feature">
+                        • Manual search input for filtering devices by MAC ID<br>
+                        • QR code scanning functionality for rapid device identification<br>
+                        • Scan button integration for beacon QR code reading
+                    </div>
+                </li>
+                
+                <li><strong>Temperature Alert System</strong>
+                    <div class="sub-feature">
+                        • Automatic status determination based on temperature thresholds<br>
+                        • <span class="temperature-range">Alert State: Temperature > 8°C or < 2°C</span><br>
+                        • Visual indicators for normal vs. excursion states
+                    </div>
+                </li>
+                
+                <li><strong>Interactive Controls</strong>
+                    <div class="sub-feature">
+                        • Connect button for devices in alert/excursion state<br>
+                        • Configuration icon for device settings (Admin users only)
+                    </div>
+                </li>
+            </ul>
+            
+            <div class="admin-only">
+                Configuration icons are exclusively available to authenticated admin users for security and system integrity.
+            </div>
+        </div>
+    </div>
+    
+    <div class="page-break"></div>
+    
+    <div class="section">
+        <h2>3. Device Details & Analytics</h2>
+        
+        <div class="feature-card">
+            <h3>Comprehensive Device Information Screen</h3>
+            <p>Detailed device analytics and historical data visualization:</p>
+            
+            <ul class="feature-list">
+                <li><strong>Core Device Metrics</strong>
+                    <div class="sub-feature">
+                        • <span class="highlight">MAC ID</span> - Device identification<br>
+                        • <span class="highlight">Battery Level</span> - Current power status<br>
+                        • <span class="highlight">Firmware Version</span> - Software version information<br>
+                        • <span class="highlight">Current Temperature</span> - Real-time temperature reading
+                    </div>
+                </li>
+                
+                <li><strong>Excursion Event Analysis</strong>
+                    <div class="sub-feature">
+                        • <span class="highlight">Excursion Event Timestamp</span> - Most recent temperature violation<br>
+                        • <span class="temperature-range">Excursion Detection: Temperature > 8°C or < 2°C</span><br>
+                        • <span class="highlight">Excursion Duration</span> - Time elapsed from event to current time
+                    </div>
+                </li>
+                
+                <li><strong>Data Visualization</strong>
+                    <div class="sub-feature">
+                        • Interactive temperature vs. time graph<br>
+                        • Visual representation of temperature fluctuations over time
+                    </div>
+                </li>
+                
+                <li><strong>Data Export Functionality</strong>
+                    <div class="sub-feature">
+                        • Complete historical data export in CSV format
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>4. Administrative Configuration</h2>
+        
+        <div class="feature-card">
+            <h3>Device Settings Screen</h3>
+            
+            <div class="admin-only">
+                This screen is exclusively accessible to authenticated admin users only.
+            </div>
+            
+            <ul class="feature-list">
+                <li><strong>Current Configuration Display</strong>
+                    <div class="sub-feature">
+                        • Real-time temperature threshold configuration view<br>
+                        • Current firmware version information<br>
+                        • System status overview
+                    </div>
+                </li>
+                
+                <li><strong>Temperature Threshold Management</strong>
+                    <div class="sub-feature">
+                        • Dynamic temperature threshold updating<br>
+                        • Real-time configuration changes
+                    </div>
+                </li>
+                
+                <li><strong>Firmware Management</strong>
+                    <div class="sub-feature">
+                        • Firmware version upgrade functionality<br>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </div>
+    
+</body>
+</html>

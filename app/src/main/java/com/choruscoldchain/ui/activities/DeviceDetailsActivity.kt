@@ -540,6 +540,12 @@ class DeviceDetailsActivity : AppCompatActivity() {
                 viewModel.clearError()
             }
         }
+
+        viewModel.recentLightIntensity.observe(this) { text ->
+            val value = text ?: "N/A"
+            val tv = findViewById<android.widget.TextView>(R.id.tv_recent_light)
+            tv?.text = value
+        }
     }
 
     private fun updateConnectionStatus(connectionState: ConnectionState) {

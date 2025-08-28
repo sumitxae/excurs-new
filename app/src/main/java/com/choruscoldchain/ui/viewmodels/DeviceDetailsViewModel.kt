@@ -18,6 +18,7 @@ import com.choruscoldchain.utils.TimestampConverter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import com.minew.ble.mst03.bean.HtData;
 @HiltViewModel
 class DeviceDetailsViewModel
@@ -55,9 +56,13 @@ constructor(
     val temperatureHistoryAnalysis: LiveData<TemperatureHistoryAnalysis> =
             _temperatureHistoryAnalysis
 
+    private val _recentLightIntensity = MutableLiveData<String>()
+    val recentLightIntensity: LiveData<String> = _recentLightIntensity
+
     private var currentDeviceMac: String? = null
     private var connectionStartTime: Long = 0L
     private var deviceTempEventTimestamp: Long? = null
+    private var isQueryingData: Boolean = false
 
     init {
         observeConnectionStates()
@@ -74,7 +79,12 @@ constructor(
                             _deviceInfo.value = device.copy(connectionState = state)
 
                             if (state == ConnectionState.READY) {
-                                startTemperatureHistoryAnalysis()
+                                // Add delay to allow device to stabilize after connection
+                                viewModelScope.launch {
+                                    delay(2000) // 2 second delay to ensure device is fully ready
+                                    startTemperatureHistoryAnalysis()
+                                    // Light intensity will be queried after temperature analysis completes
+                                }
                             }
                         }
                     }
@@ -84,8 +94,14 @@ constructor(
     }
 
     private fun startTemperatureHistoryAnalysis() {
+        if (isQueryingData) {
+            Log.w("DeviceDetailsViewModel", "Already querying data, skipping temperature analysis")
+            return
+        }
+        
         try {
             Log.d("DeviceDetailsViewModel", "Starting temperature history analysis...")
+            isQueryingData = true
 
             _excursionEventTime.value = "Processing..."
             _isAnalyzingTemperature.value = true
@@ -95,6 +111,7 @@ constructor(
             Log.e("DeviceDetailsViewModel", "Error starting temperature history analysis", e)
             _excursionEventTime.value = "Error starting analysis"
             _isAnalyzingTemperature.value = false
+            isQueryingData = false
         }
     }
 
@@ -103,6 +120,15 @@ constructor(
             try {
                 currentDeviceMac?.let { macAddress ->
                     Log.d("DeviceDetailsViewModel", "Querying all temperature history data...")
+                    
+                    // Check if device is still connected before querying
+                    val currentState = bleManager.connectionStates.value[macAddress]
+                    if (currentState != ConnectionState.READY) {
+                        Log.w("DeviceDetailsViewModel", "Device not ready, skipping temperature history query. State: $currentState")
+                        _temperatureHistoryData.value = "Device not ready"
+                        _isAnalyzingTemperature.value = false
+                        return@launch
+                    }
 
                     val historyData = bleManager.queryAllTemperatureHistory(macAddress = macAddress)
 
@@ -117,6 +143,7 @@ constructor(
             } catch (e: Exception) {
                 Log.e("DeviceDetailsViewModel", "Error querying temperature history data", e)
                 _temperatureHistoryData.value = "Error querying temperature history: ${e.message}"
+                _isAnalyzingTemperature.value = false
             }
         }
     }
@@ -136,6 +163,12 @@ constructor(
             updateExcursionInfo(analysis)
 
             Log.d("DeviceDetailsViewModel", "Temperature history analysis completed")
+            
+            // Now query light intensity after temperature analysis is complete
+            viewModelScope.launch {
+                delay(1000) // 1 second delay after temperature analysis
+                refreshRecentLightIntensity()
+            }
         } catch (e: Exception) {
             Log.e("DeviceDetailsViewModel", "Error analyzing temperature history", e)
         }
@@ -176,6 +209,52 @@ constructor(
         }
 
         _isAnalyzingTemperature.value = false
+        isQueryingData = false
+    }
+
+    fun refreshRecentLightIntensity() {
+        if (isQueryingData) {
+            Log.w("DeviceDetailsViewModel", "Already querying data, skipping light intensity query")
+            return
+        }
+        
+        viewModelScope.launch {
+            try {
+                currentDeviceMac?.let { mac ->
+                    // Double-check connection state before proceeding
+                    val currentState = bleManager.connectionStates.value[mac]
+                    if (currentState != ConnectionState.READY) {
+                        Log.w("DeviceDetailsViewModel", "Device not ready for light intensity query. State: $currentState")
+                        _recentLightIntensity.value = "Device not ready"
+                        return@launch
+                    }
+
+                    Log.d("DeviceDetailsViewModel", "Starting light intensity query for device: $mac")
+                    
+                    // Try recent data first (last minute)
+                    var result = bleManager.queryRecentLightIntensity(mac, 60)
+                    
+                    if (result == null) {
+                        Log.d("DeviceDetailsViewModel", "No recent light data, trying all history")
+                        // Fallback to all available history
+                        result = bleManager.queryAllLightHistory(mac)
+                    }
+                    
+                    if (result != null) {
+                        val (intensity, ts) = result
+                        _recentLightIntensity.value = "$intensity nW/cm²"
+                        Log.d("DeviceDetailsViewModel", "Light intensity query successful: $intensity nW/cm²")
+                        Log.d("DeviceDetailsViewModel", "Light intensity query timestamp: $ts")
+                    } else {
+                        _recentLightIntensity.value = "N/A"
+                        Log.d("DeviceDetailsViewModel", "No light intensity data available")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("DeviceDetailsViewModel", "Error fetching recent light intensity", e)
+                _recentLightIntensity.value = "Error: ${e.message}"
+            }
+        }
     }
 
     fun loadDeviceDetails(context: Context, deviceMac: String) {
