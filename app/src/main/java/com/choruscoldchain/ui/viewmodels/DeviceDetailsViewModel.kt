@@ -325,6 +325,8 @@ constructor(
                         bleManager.stopScan(context)
 
                         Log.d("DeviceDetailsViewModel", "Attempting connection...")
+                        // Start parallel native GATT to capture raw notifications
+                        bleManager.startNativeGatt(context, deviceMac)
                         val connected =
                                 bleManager.connectDevice(context, deviceMac, "minewtech1234567")
                         Log.d("DeviceDetailsViewModel", "Connection result: $connected")
@@ -379,7 +381,10 @@ constructor(
     }
 
     fun disconnectDevice() {
-        currentDeviceMac?.let { mac -> bleManager.disconnectDevice(mac) }
+        currentDeviceMac?.let { mac ->
+            bleManager.disconnectDevice(mac)
+            bleManager.stopNativeGatt(mac)
+        }
     }
 
     fun clearError() {

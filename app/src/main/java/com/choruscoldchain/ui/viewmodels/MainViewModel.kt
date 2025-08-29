@@ -159,6 +159,8 @@ class MainViewModel @Inject constructor(
                 return false
             }
             
+            // Start native GATT in parallel for raw notifications
+            // bleManager.startNativeGatt(context, macAddress)
             val success = bleManager.connectDevice(context, macAddress, secretKey)
             if (!success) {
                 _errorMessage.value = "Failed to connect to device"
@@ -174,6 +176,7 @@ class MainViewModel @Inject constructor(
     
     fun disconnectDevice(macAddress: String) {
         bleManager.disconnectDevice(macAddress)
+        // bleManager.stopNativeGatt(macAddress)
     }
     
     fun startContinuousScanning(context: android.content.Context): Boolean {

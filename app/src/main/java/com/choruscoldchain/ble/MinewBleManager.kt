@@ -30,11 +30,26 @@ import com.minew.ble.v3.enums.BleConnectionState
 import com.minew.ble.v3.enums.FrameType
 import com.minew.ble.mst03.frames.CombinationFrame
 import com.minew.ble.mst03.frames.DeviceStaticInfoFrame
-import com.minew.ble.mst03.interfaces.OnReceiveDataListener
+// Removed direct dependency on OnReceiveDataListener; using reflection/proxy to avoid API coupling
 import com.minew.ble.v3.interfaces.OnFirmwareUpgradeListener
 import com.choruscoldchain.utils.PermissionHelper
 import com.choruscoldchain.utils.BluetoothHelper
 import com.minew.ble.mst03.bean.HtData;
+
+// Android BLE raw scan imports
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import android.bluetooth.le.BluetoothLeScanner
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
+import android.content.pm.PackageManager
+// Android BLE GATT imports (native connection)
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
 
 @Singleton
 class MinewBleManager @Inject constructor() {
@@ -60,6 +75,29 @@ class MinewBleManager @Inject constructor() {
     
     private val _sensorDataUpdates = Channel<SensorData>(Channel.UNLIMITED)
     val sensorDataUpdates: Flow<SensorData> = _sensorDataUpdates.receiveAsFlow()
+
+    // Raw hex data stream (new, non-breaking)
+    private val _rawDataUpdates = Channel<com.choruscoldchain.data.models.RawBleData>(Channel.UNLIMITED)
+    val rawDataUpdates: Flow<com.choruscoldchain.data.models.RawBleData> = _rawDataUpdates.receiveAsFlow()
+
+    // Prevent duplicate listener registration
+    @Volatile private var rawListenerRegistered: Boolean = false
+
+    // ========== RAW ADVERTISEMENT SCANNING (pre-connection) ==========
+    private val MANUFACTURER_ID_HEX = "E000"
+    private val MANUFACTURER_ID_INT_PRIMARY = 0x00E0
+    private val MANUFACTURER_ID_INT_ALT = 0x00E0 // Observed in logs
+    private val _rawAdvDataUpdates = Channel<com.choruscoldchain.data.models.RawBleData>(Channel.UNLIMITED)
+    val rawAdvDataUpdates: Flow<com.choruscoldchain.data.models.RawBleData> = _rawAdvDataUpdates.receiveAsFlow()
+    @Volatile private var isRawAdvScanning: Boolean = false
+    @Volatile private var bleScanner: BluetoothLeScanner? = null
+    @Volatile private var rawScanCallback: ScanCallback? = null
+    @Volatile private var rawAdvDebugLogging: Boolean = false
+
+    fun setRawAdvDebugLogging(enabled: Boolean) {
+        rawAdvDebugLogging = enabled
+        Log.d(TAG, "Raw ADV debug logging: $enabled")
+    }
     
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
@@ -98,7 +136,7 @@ class MinewBleManager @Inject constructor() {
         try {
             _isScanning.value = true
             scannedDevices.clear()
-            
+            startRawAdvScan(context)
             mst03Manager.startScan(context, durationMs, object : OnScanDevicesResultListener<MST03Entity> {
                 override fun onScanResult(scanList: MutableList<MST03Entity>?) {
                     scanList?.let { devices ->
@@ -175,6 +213,12 @@ class MinewBleManager @Inject constructor() {
                 
                 Log.d(TAG, "Updating connection state for $macAddress: $state")
                 updateConnectionState(macAddress, state)
+
+                // When READY, attempt to hook raw data listener once per device
+                if (state == ConnectionState.READY) {
+                    Log.d(TAG, "READY reached for $macAddress, attempting raw listener registration (registered=$rawListenerRegistered)")
+                    tryRegisterRawListener(macAddress)
+                }
                 
                 // Log all current connection states for debugging
                 Log.d(TAG, "All connection states after update: ${_connectionStates.value}")
@@ -207,6 +251,152 @@ class MinewBleManager @Inject constructor() {
         } catch (e: Exception) {
             Log.e(TAG, "Error setting up connection listener", e)
         }
+    }
+
+    private fun tryRegisterRawListener(macAddress: String) {
+        if (rawListenerRegistered) {
+            Log.d(TAG, "Raw listener already registered; skipping.")
+            return
+        }
+        try {
+            val managerClass = mst03Manager.javaClass
+            val methods = managerClass.methods
+
+            // Debug: dump all methods briefly
+            try {
+                Log.d(TAG, "Minew manager methods count: ${methods.size}")
+                methods.take(1000).forEach { m ->
+                    val params = m.parameterTypes.joinToString(", ") { it.name }
+                    Log.d(TAG, "Method: ${m.name}(${params}) -> ${m.returnType?.name}")
+                }
+            } catch (_: Throwable) {}
+
+            // Narrow to candidate listener-like setters
+            val listenerLike = methods.filter { m ->
+                m.parameterTypes.size == 1 && m.parameterTypes[0].isInterface && (
+                    m.name.contains("listener", true) ||
+                    m.name.contains("receive", true) ||
+                    m.name.contains("callback", true)
+                )
+            }
+            Log.d(TAG, "Minew manager listener-like methods: ${listenerLike.map { it.name }}")
+
+            val setter = methods.firstOrNull { m ->
+                m.parameterTypes.size == 1 && m.parameterTypes[0].isInterface &&
+                    !m.name.equals("setOnConnStateListener", true) && (
+                        m.name.contains("setOnReceiveDataListener", true) ||
+                        m.name.contains("setOnDataListener", true) ||
+                        m.name.contains("setReceiveListener", true) ||
+                        (m.name.startsWith("set", true) && m.name.contains("listener", true))
+                    )
+            }
+
+            if (setter != null) {
+                val listenerInterface = setter.parameterTypes[0]
+                Log.d(TAG, "Using setter: ${setter.name}, interface: ${listenerInterface.name}")
+                val proxy = buildRawProxy(macAddress, listenerInterface)
+                setter.invoke(mst03Manager, proxy)
+                rawListenerRegistered = true
+                Log.d(TAG, "Raw data listener registered via reflection: ${setter.name}")
+                return
+            }
+
+            // If not found on top-level, inspect connection manager
+            tryRegisterOnSubManager(macAddress, hostName = "ConnManager") {
+                val m = mst03Manager::class.java.getMethod("getConnSensorManager")
+                m.invoke(mst03Manager)
+            }
+            if (rawListenerRegistered) return
+
+            // Inspect scan manager as well
+            tryRegisterOnSubManager(macAddress, hostName = "ScanManager") {
+                val m = mst03Manager::class.java.getMethod("getScanSensorManager")
+                m.invoke(mst03Manager)
+            }
+        } catch (t: Throwable) {
+            Log.e(TAG, "Failed to register raw data listener", t)
+        }
+    }
+
+    private fun buildRawProxy(macAddress: String, listenerInterface: Class<*>): Any {
+        return java.lang.reflect.Proxy.newProxyInstance(
+            listenerInterface.classLoader,
+            arrayOf(listenerInterface)
+        ) { _, method, args ->
+            try {
+                val methodName = method.name
+                Log.d(TAG, "Raw listener invoked: method=$methodName argsCount=${args?.size ?: 0}")
+                if (args != null && methodName.startsWith("on", ignoreCase = true)) {
+                    var foundMac: String? = null
+                    var hex: String? = null
+
+                    for (arg in args) {
+                        when (arg) {
+                            is String -> if (arg.count { it == ':' } == 5) foundMac = arg
+                            is ByteArray -> hex = bytesToHex(arg)
+                        }
+                    }
+
+                    if (hex != null) {
+                        Log.d(TAG, "RAW DATA - ${foundMac ?: macAddress}: $hex")
+                        _rawDataUpdates.trySend(
+                            com.choruscoldchain.data.models.RawBleData(
+                                macAddress = foundMac ?: macAddress,
+                                hexPayload = hex,
+                                timestamp = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
+            } catch (inner: Throwable) {
+                Log.e(TAG, "Error in raw data proxy invoke", inner)
+            }
+            null
+        }
+    }
+
+    private fun tryRegisterOnSubManager(macAddress: String, hostName: String, provider: () -> Any?) {
+        try {
+            val host = provider.invoke() ?: return
+            val cls = host.javaClass
+            val methods = cls.methods
+            Log.d(TAG, "$hostName methods count: ${methods.size}")
+            methods.take(1000).forEach { m ->
+                val params = m.parameterTypes.joinToString(", ") { it.name }
+                Log.d(TAG, "$hostName Method: ${m.name}(${params}) -> ${m.returnType?.name}")
+            }
+
+            val setter = methods.firstOrNull { m ->
+                m.parameterTypes.size == 1 && m.parameterTypes[0].isInterface &&
+                    !m.name.equals("setOnConnStateListener", true) && (
+                        m.name.contains("setOnReceiveDataListener", true) ||
+                        m.name.contains("setOnDataListener", true) ||
+                        m.name.contains("setReceiveListener", true) ||
+                        (m.name.startsWith("set", true) && m.name.contains("listener", true))
+                    )
+            }
+
+            if (setter != null) {
+                val listenerInterface = setter.parameterTypes[0]
+                Log.d(TAG, "Using $hostName setter: ${setter.name}, interface: ${listenerInterface.name}")
+                val proxy = buildRawProxy(macAddress, listenerInterface)
+                setter.invoke(host, proxy)
+                rawListenerRegistered = true
+                Log.d(TAG, "Raw data listener registered on $hostName via reflection: ${setter.name}")
+            } else {
+                Log.w(TAG, "No suitable raw listener setter found on $hostName")
+            }
+        } catch (t: Throwable) {
+            Log.e(TAG, "Failed to register raw listener on $hostName", t)
+        }
+    }
+
+    private fun bytesToHex(bytes: ByteArray): String {
+        val sb = StringBuilder(bytes.size * 2)
+        for (b in bytes) {
+            sb.append(String.format("%02X", b))
+        }
+        return sb.toString()
     }
     
     private fun processSensorData(entity: MST03Entity) {
@@ -331,6 +521,344 @@ class MinewBleManager @Inject constructor() {
             Log.e(TAG, "Error stopping BLE scan", e)
         }
         _isScanning.value = false
+    }
+
+    fun startRawAdvScan(context: Context): Boolean {
+        try {
+            if (isRawAdvScanning) {
+                Log.d(TAG, "Raw ADV scan already running")
+                return true
+            }
+
+            if (!hasRequiredPermissions(context)) {
+                Log.e(TAG, "Missing permissions for raw ADV scan")
+                return false
+            }
+
+            val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val adapter: BluetoothAdapter = btManager.adapter ?: return false
+            if (!adapter.isEnabled) {
+                Log.e(TAG, "Bluetooth disabled; cannot start raw ADV scan")
+                return false
+            }
+
+            val scanner = adapter.bluetoothLeScanner
+            if (scanner == null) {
+                Log.e(TAG, "BluetoothLeScanner unavailable")
+                return false
+            }
+
+            val settings = ScanSettings.Builder()
+                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .build()
+
+            val callback = object : ScanCallback() {
+                override fun onScanResult(callbackType: Int, result: ScanResult) {
+                    handleRawAdvResult(result)
+                }
+
+                override fun onBatchScanResults(results: MutableList<ScanResult>) {
+                    results.forEach { handleRawAdvResult(it) }
+                }
+
+                override fun onScanFailed(errorCode: Int) {
+                    Log.e(TAG, "Raw ADV scan failed: $errorCode")
+                }
+            }
+
+            Log.d(TAG, "Starting RAW ADV scan (software-filter manufacturer=$MANUFACTURER_ID_HEX)")
+            scanner.startScan(null, settings, callback)
+            bleScanner = scanner
+            rawScanCallback = callback
+            isRawAdvScanning = true
+            return true
+        } catch (t: Throwable) {
+            Log.e(TAG, "Failed to start raw ADV scan", t)
+            return false
+        }
+    }
+
+    fun stopRawAdvScan() {
+        try {
+            if (!isRawAdvScanning) return
+            val scanner = bleScanner
+            val callback = rawScanCallback
+            if (scanner != null && callback != null) {
+                scanner.stopScan(callback)
+                Log.d(TAG, "Stopped RAW ADV scan")
+            }
+        } catch (t: Throwable) {
+            Log.e(TAG, "Failed to stop raw ADV scan", t)
+        } finally {
+            isRawAdvScanning = false
+            rawScanCallback = null
+            bleScanner = null
+        }
+    }
+
+    private fun handleRawAdvResult(result: ScanResult) {
+        try {
+            val record = result.scanRecord ?: return
+            val mac = result.device?.address ?: "UNKNOWN"
+            
+            // Check if device has our target manufacturer ID
+            val sparse = record.manufacturerSpecificData
+            var hasTargetManufacturer = false
+            var matchedId: Int? = null
+            var foundIds: MutableList<Int> = mutableListOf()
+            
+            if (sparse != null) {
+                for (i in 0 until sparse.size()) {
+                    val id = sparse.keyAt(i)
+                    foundIds.add(id)
+                    if (id == MANUFACTURER_ID_INT_PRIMARY || id == MANUFACTURER_ID_INT_ALT) {
+                        hasTargetManufacturer = true
+                        matchedId = id
+                        break
+                    }
+                }
+            }
+            
+            if (!hasTargetManufacturer) {
+                if (rawAdvDebugLogging) {
+                    if (foundIds.isNotEmpty()) {
+                        Log.d(TAG, "RAW ADV DEBUG - $mac manufacturers=${foundIds.joinToString { String.format("%04X", it) }}")
+                    } else {
+                        Log.d(TAG, "RAW ADV DEBUG - $mac no manufacturer data")
+                    }
+                }
+                return
+            }
+            
+            // Capture complete advertisement packet (like nRF Connect)
+            val completeBytes = record.bytes ?: return
+            val completeHex = bytesToHex(completeBytes)
+            val idHex = String.format("%04X", matchedId ?: MANUFACTURER_ID_INT_ALT)
+            
+            // Also extract individual sections for detailed analysis
+            val sections = mutableListOf<String>()
+            
+            // Manufacturer specific data
+            if (sparse != null) {
+                for (i in 0 until sparse.size()) {
+                    val id = sparse.keyAt(i)
+                    val data = sparse.valueAt(i)
+                    sections.add("MFG_${String.format("%04X", id)}=${bytesToHex(data)}")
+                }
+            }
+            
+            // Service UUIDs
+            val serviceUuids = record.serviceUuids
+            if (!serviceUuids.isNullOrEmpty()) {
+                sections.add("SERVICES=${serviceUuids.joinToString(",")}")
+            }
+            
+            // Service data
+            val serviceData = record.serviceData
+            if (!serviceData.isNullOrEmpty()) {
+                for ((uuid, data) in serviceData) {
+                    sections.add("SERVICE_DATA_${uuid}=${bytesToHex(data)}")
+                }
+            }
+            
+            // Device name
+            val deviceName = record.deviceName
+            if (!deviceName.isNullOrEmpty()) {
+                sections.add("NAME=$deviceName")
+            }
+            
+            // TX power
+            val txPower = record.txPowerLevel
+            if (txPower != Int.MIN_VALUE) {
+                sections.add("TX_POWER=${txPower}dBm")
+            }
+            
+            Log.d(TAG, "RAW ADV - $mac ($idHex): $completeHex")
+            Log.d(TAG, "RAW ADV DETAILS - $mac: ${sections.joinToString(" | ")}")
+            
+            _rawAdvDataUpdates.trySend(
+                com.choruscoldchain.data.models.RawBleData(
+                    macAddress = mac,
+                    hexPayload = completeHex,
+                    timestamp = System.currentTimeMillis()
+                )
+            )
+        } catch (t: Throwable) {
+            Log.e(TAG, "Error handling raw adv result", t)
+        }
+    }
+
+    // ========== NATIVE GATT CONNECTION (parallel to SDK) ==========
+    private val _rawGattDataUpdates = Channel<com.choruscoldchain.data.models.RawBleData>(Channel.UNLIMITED)
+    val rawGattDataUpdates: Flow<com.choruscoldchain.data.models.RawBleData> = _rawGattDataUpdates.receiveAsFlow()
+    @Volatile private var gattByMac: MutableMap<String, BluetoothGatt> = mutableMapOf()
+    private val gattCallbackByMac: MutableMap<String, BluetoothGattCallback> = mutableMapOf()
+
+    fun startNativeGatt(context: Context, macAddress: String): Boolean {
+        return try {
+            val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val adapter = btManager.adapter ?: return false
+            if (!adapter.isEnabled) {
+                Log.e(TAG, "Bluetooth disabled; cannot start native GATT for $macAddress")
+                return false
+            }
+
+            if (gattByMac.containsKey(macAddress)) {
+                Log.d(TAG, "Native GATT already active for $macAddress")
+                return true
+            }
+
+            val device: BluetoothDevice? = try {
+                adapter.getRemoteDevice(macAddress)
+            } catch (t: Throwable) {
+                Log.e(TAG, "Invalid MAC for native GATT: $macAddress", t)
+                null
+            }
+            if (device == null) return false
+
+            val callback = object : BluetoothGattCallback() {
+                override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+                    Log.d(TAG, "NATIVE GATT state $macAddress: status=$status state=$newState")
+                    if (newState == android.bluetooth.BluetoothProfile.STATE_CONNECTED) {
+                        Log.d(TAG, "NATIVE GATT connected -> discovering services: $macAddress")
+                        gatt.discoverServices()
+                    } else if (newState == android.bluetooth.BluetoothProfile.STATE_DISCONNECTED) {
+                        Log.d(TAG, "NATIVE GATT disconnected: $macAddress")
+                        cleanupGatt(macAddress)
+                    }
+                }
+
+                override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+                    Log.d(TAG, "NATIVE GATT services discovered for $macAddress status=$status")
+                    try {
+                        gatt.services?.forEach { svc ->
+                            Log.d(TAG, "Svc ${svc.uuid} -> ${svc.characteristics?.size ?: 0} chrs")
+                            svc.characteristics?.forEach { chr ->
+                                val props = chr.properties
+                                val supportsNotify = (props and BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0
+                                val supportsIndicate = (props and BluetoothGattCharacteristic.PROPERTY_INDICATE) != 0
+                                if (supportsNotify || supportsIndicate) {
+                                    enableNotifications(gatt, chr, supportsIndicate)
+                                }
+                            }
+                        }
+                    } catch (t: Throwable) {
+                        Log.e(TAG, "Error iterating services for $macAddress", t)
+                    }
+                }
+
+                override fun onCharacteristicChanged(
+                    gatt: BluetoothGatt,
+                    characteristic: BluetoothGattCharacteristic,
+                    value: ByteArray
+                ) {
+                    val hex = bytesToHex(value)
+                    Log.d(TAG, "RAW GATT - $macAddress ${characteristic.uuid}: $hex")
+                    _rawGattDataUpdates.trySend(
+                        com.choruscoldchain.data.models.RawBleData(
+                            macAddress = macAddress,
+                            hexPayload = hex,
+                            timestamp = System.currentTimeMillis()
+                        )
+                    )
+                }
+
+                override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+                    // Fallback for older API where value is inside characteristic
+                    val value = characteristic.value ?: return
+                    onCharacteristicChanged(gatt, characteristic, value)
+                }
+            }
+
+            Log.d(TAG, "NATIVE GATT connect start: $macAddress")
+            val gatt = device.connectGatt(context, false, callback)
+            if (gatt == null) {
+                Log.e(TAG, "connectGatt returned null for $macAddress")
+                return false
+            }
+            gattByMac[macAddress] = gatt
+            gattCallbackByMac[macAddress] = callback
+            true
+        } catch (t: Throwable) {
+            Log.e(TAG, "Failed to start native GATT for $macAddress", t)
+            false
+        }
+    }
+
+    fun stopNativeGatt(macAddress: String) {
+        cleanupGatt(macAddress)
+    }
+
+    private fun enableNotifications(gatt: BluetoothGatt, chr: BluetoothGattCharacteristic, indicate: Boolean) {
+        try {
+            val ok = gatt.setCharacteristicNotification(chr, true)
+            Log.d(TAG, "Enable ${if (indicate) "INDICATE" else "NOTIFY"} on ${chr.uuid} -> setCharNotif=$ok")
+            val cccd: BluetoothGattDescriptor? = chr.getDescriptor(java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
+            if (cccd != null) {
+                val value = if (indicate) BluetoothGattDescriptor.ENABLE_INDICATION_VALUE else BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                cccd.value = value
+                val wrote = gatt.writeDescriptor(cccd)
+                Log.d(TAG, "CCCD write ${chr.uuid} wrote=$wrote")
+            } else {
+                Log.w(TAG, "CCCD not found for ${chr.uuid}")
+            }
+        } catch (t: Throwable) {
+            Log.e(TAG, "Failed to enable notifications for ${chr.uuid}", t)
+        }
+    }
+
+    private fun cleanupGatt(macAddress: String) {
+        try {
+            val g = gattByMac.remove(macAddress)
+            if (g != null) {
+                try { g.disconnect() } catch (_: Throwable) {}
+                try { g.close() } catch (_: Throwable) {}
+                Log.d(TAG, "NATIVE GATT cleaned: $macAddress")
+            }
+            gattCallbackByMac.remove(macAddress)
+        } catch (t: Throwable) {
+            Log.e(TAG, "Error cleaning GATT for $macAddress", t)
+        }
+    }
+
+    // Public helper to request MTU for larger notifications
+    fun requestNativeMtu(macAddress: String, mtu: Int = 247): Boolean {
+        val g = gattByMac[macAddress] ?: return false
+        return try {
+            val ok = g.requestMtu(mtu)
+            Log.d(TAG, "NATIVE GATT requestMtu $macAddress mtu=$mtu ok=$ok")
+            ok
+        } catch (t: Throwable) {
+            Log.e(TAG, "requestMtu failed for $macAddress", t)
+            false
+        }
+    }
+
+    // Public helper to subscribe to a specific service/characteristic UUID
+    fun subscribeNativeGatt(macAddress: String, serviceUuid: String, characteristicUuid: String): Boolean {
+        val g = gattByMac[macAddress] ?: run {
+            Log.e(TAG, "subscribeNativeGatt: no active GATT for $macAddress")
+            return false
+        }
+        return try {
+            val svc = g.services?.firstOrNull { it.uuid.toString().equals(serviceUuid, true) }
+            if (svc == null) {
+                Log.e(TAG, "Service $serviceUuid not found on $macAddress")
+                return false
+            }
+            val chr = svc.characteristics?.firstOrNull { it.uuid.toString().equals(characteristicUuid, true) }
+            if (chr == null) {
+                Log.e(TAG, "Characteristic $characteristicUuid not found in $serviceUuid on $macAddress")
+                return false
+            }
+            val props = chr.properties
+            val indicate = (props and BluetoothGattCharacteristic.PROPERTY_INDICATE) != 0
+            enableNotifications(g, chr, indicate)
+            true
+        } catch (t: Throwable) {
+            Log.e(TAG, "subscribeNativeGatt failed for $macAddress svc=$serviceUuid chr=$characteristicUuid", t)
+            false
+        }
     }
     
     suspend fun connectDevice(context: Context?, macAddress: String, secretKey: String = DEFAULT_SECRET_KEY): Boolean {
@@ -756,8 +1284,20 @@ class MinewBleManager @Inject constructor() {
                 
                 val list = historyData?.historyDataList
                 if (result && list != null && list.isNotEmpty()) {
-                    val latest = list.maxByOrNull { data -> data.timestamps }
-                    latest?.let { cont.resume(Pair(it.lightIntensity, it.timestamps)) } ?: cont.resume(null)
+                    var latestTs = Long.MIN_VALUE
+                    var latestIntensity = 0
+                    for (d in list) {
+                        val ts = d.timestamps
+                        if (ts > latestTs) {
+                            latestTs = ts
+                            latestIntensity = d.lightIntensity
+                        }
+                    }
+                    if (latestTs != Long.MIN_VALUE) {
+                        cont.resume(Pair(latestIntensity, latestTs))
+                    } else {
+                        cont.resume(null)
+                    }
                 } else {
                     if (seconds < 300) {
                         val extendedStartTime = systemTimeSec - 300
@@ -765,8 +1305,20 @@ class MinewBleManager @Inject constructor() {
                             if (!cont.isActive) return@queryLightHistoryData
                             val extendedList = extendedHistoryData?.historyDataList
                             if (extendedResult && extendedList != null && extendedList.isNotEmpty()) {
-                                val latest = extendedList.maxByOrNull { data -> data.timestamps }
-                                latest?.let { cont.resume(Pair(it.lightIntensity, it.timestamps)) } ?: cont.resume(null)
+                                var latestTs2 = Long.MIN_VALUE
+                                var latestIntensity2 = 0
+                                for (d in extendedList) {
+                                    val ts = d.timestamps
+                                    if (ts > latestTs2) {
+                                        latestTs2 = ts
+                                        latestIntensity2 = d.lightIntensity
+                                    }
+                                }
+                                if (latestTs2 != Long.MIN_VALUE) {
+                                    cont.resume(Pair(latestIntensity2, latestTs2))
+                                } else {
+                                    cont.resume(null)
+                                }
                             } else {
                                 cont.resume(null)
                             }
@@ -796,8 +1348,20 @@ class MinewBleManager @Inject constructor() {
                 
                 val list = historyData?.historyDataList
                 if (result && list != null && list.isNotEmpty()) {
-                    val latest = list.maxByOrNull { data -> data.timestamps }
-                    latest?.let { cont.resume(Pair(it.lightIntensity, it.timestamps)) } ?: cont.resume(null)
+                    var latestTs = Long.MIN_VALUE
+                    var latestIntensity = 0
+                    for (d in list) {
+                        val ts = d.timestamps
+                        if (ts > latestTs) {
+                            latestTs = ts
+                            latestIntensity = d.lightIntensity
+                        }
+                    }
+                    if (latestTs != Long.MIN_VALUE) {
+                        cont.resume(Pair(latestIntensity, latestTs))
+                    } else {
+                        cont.resume(null)
+                    }
                 } else {
                     cont.resume(null)
                 }
