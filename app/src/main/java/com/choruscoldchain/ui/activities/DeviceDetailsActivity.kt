@@ -6,16 +6,14 @@ import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import com.github.mikephil.charting.components.XAxis
-import com.github.mikephil.charting.data.Entry
-import com.github.mikephil.charting.data.LineData
-import com.github.mikephil.charting.data.LineDataSet
-import com.github.mikephil.charting.formatter.ValueFormatter
+import androidx.lifecycle.lifecycleScope
+import com.choruscoldchain.BuildConfig
 import com.choruscoldchain.R
 import com.choruscoldchain.data.models.ConnectionState
 import com.choruscoldchain.databinding.ActivityDeviceDetailsBinding
@@ -23,14 +21,19 @@ import com.choruscoldchain.permissions.PermissionCoordinator
 import com.choruscoldchain.permissions.PermissionType
 import com.choruscoldchain.ui.viewmodels.DeviceDetailsViewModel
 import com.choruscoldchain.utils.AppIdUtils
+
 import com.choruscoldchain.utils.CsvGenerator
-import com.choruscoldchain.BuildConfig
+import com.github.mikephil.charting.components.XAxis
+import com.github.mikephil.charting.data.Entry
+import com.github.mikephil.charting.data.LineData
+import com.github.mikephil.charting.data.LineDataSet
+import com.github.mikephil.charting.formatter.ValueFormatter
 import com.permissionx.guolindev.PermissionX
 import dagger.hilt.android.AndroidEntryPoint
 import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
-import android.widget.Toast
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class DeviceDetailsActivity : AppCompatActivity() {
@@ -520,13 +523,13 @@ class DeviceDetailsActivity : AppCompatActivity() {
             // Plot the temperature graph
             plotTemperatureGraph(analysis)
 
-            // Generate CSV file with historical data
-            generateCsvFromHistoricalData(analysis)
-
             binding.tvTemperatureHistory.visibility = View.VISIBLE
             binding.tvGraphPlaceholder.visibility = View.GONE
             isAnalysisCompleted = true
             updateLoadingOverlay()
+            // Generate CSV file with historical data
+            performCsvGeneration(analysis)
+
         }
 
         viewModel.isLoading.observe(this) { _ ->
@@ -574,7 +577,11 @@ class DeviceDetailsActivity : AppCompatActivity() {
     }
 
     private fun showError(message: String) {
-        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+        try {
+            android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            android.util.Log.e("DeviceDetailsActivity", "Error showing error Toast", e)
+        }
     }
 
     private fun showDiagnosticsDialog(diagnostics: String) {
@@ -583,21 +590,25 @@ class DeviceDetailsActivity : AppCompatActivity() {
                         .setTitle("Connection Diagnostics")
                         .setMessage(diagnostics)
                         .setPositiveButton("Copy to Clipboard") { _, _ ->
-                            val clipboard =
-                                    getSystemService(Context.CLIPBOARD_SERVICE) as
-                                            android.content.ClipboardManager
-                            val clip =
-                                    android.content.ClipData.newPlainText(
-                                            "Connection Diagnostics",
-                                            diagnostics
-                                    )
-                            clipboard.setPrimaryClip(clip)
-                            android.widget.Toast.makeText(
-                                            this,
-                                            "Diagnostics copied to clipboard",
-                                            android.widget.Toast.LENGTH_SHORT
-                                    )
-                                    .show()
+                            try {
+                                val clipboard =
+                                        getSystemService(Context.CLIPBOARD_SERVICE) as
+                                                android.content.ClipboardManager
+                                val clip =
+                                        android.content.ClipData.newPlainText(
+                                                "Connection Diagnostics",
+                                                diagnostics
+                                        )
+                                clipboard.setPrimaryClip(clip)
+                                android.widget.Toast.makeText(
+                                                this,
+                                                "Diagnostics copied to clipboard",
+                                                android.widget.Toast.LENGTH_SHORT
+                                        )
+                                        .show()
+                            } catch (e: Exception) {
+                                android.util.Log.e("DeviceDetailsActivity", "Error copying diagnostics", e)
+                            }
                         }
                         .setNegativeButton("Close", null)
                         .create()
@@ -613,18 +624,6 @@ class DeviceDetailsActivity : AppCompatActivity() {
             android.util.Log.e("DeviceDetailsActivity", "Error updating app ID footer", e)
             appIdTextView.text = "App ID: Error"
         }
-    }
-
-    /** Generates CSV file from temperature historical data */
-    private fun generateCsvFromHistoricalData(
-            analysis: com.choruscoldchain.data.models.TemperatureHistoryAnalysis
-    ) {
-        // If storage permission not granted, request it and proceed on success
-        if (!hasStoragePermission()) {
-            requestStoragePermission { performCsvGeneration(analysis) }
-            return
-        }
-        performCsvGeneration(analysis)
     }
 
     private fun hasStoragePermission(): Boolean {
@@ -653,12 +652,18 @@ class DeviceDetailsActivity : AppCompatActivity() {
                     if (allGranted) {
                         onGranted()
                     } else {
-                        android.widget.Toast.makeText(
-                                        this,
-                                        "Storage permission required to save CSV",
-                                        android.widget.Toast.LENGTH_SHORT
-                                )
-                                .show()
+                        runOnUiThread {
+                            try {
+                                android.widget.Toast.makeText(
+                                                this,
+                                                "Storage permission required to save Csv",
+                                                android.widget.Toast.LENGTH_SHORT
+                                        )
+                                        .show()
+                            } catch (e: Exception) {
+                                android.util.Log.e("DeviceDetailsActivity", "Error showing permission Toast", e)
+                            }
+                        }
                     }
                 }
     }
@@ -676,44 +681,70 @@ class DeviceDetailsActivity : AppCompatActivity() {
             if (deviceMac != null && analysis.allDataPoints.isNotEmpty()) {
                 android.util.Log.d("DeviceDetailsActivity", "Device MAC: $deviceMac")
 
-                val csvUri =
-                        CsvGenerator.generateTemperatureCsv(this, deviceMac, analysis.allDataPoints)
-                csvUri?.let {
-                    android.util.Log.d(
-                            "DeviceDetailsActivity",
-                            "CSV file generated successfully: $it"
-                    )
-                    Toast.makeText(this, "CSV file saved to Downloads", Toast.LENGTH_LONG).show()
-                }
-                        ?: run {
-                            android.util.Log.e(
-                                    "DeviceDetailsActivity",
-                                    "Failed to generate CSV file"
-                            )
-                            Toast.makeText(
-                                            this,
-                                            "Failed to generate CSV file. Check storage permissions.",
-                                            Toast.LENGTH_LONG
-                                    )
-                                    .show()
+                // Launch coroutine for CSV generation
+                lifecycleScope.launch {
+                    try {
+                        CsvGenerator.generateAndUploadCsv(
+                                deviceMac,
+                                analysis.allDataPoints,
+                                { success ->
+                                    // Ensure UI operations run on main thread
+                                    runOnUiThread {
+                                        try {
+                                            if (success) {
+                                                Toast.makeText(
+                                                                this@DeviceDetailsActivity,
+                                                                "Csv file uploaded successfully",
+                                                                Toast.LENGTH_LONG
+                                                        )
+                                                        .show()
+                                            } else {
+                                                Toast.makeText(
+                                                                this@DeviceDetailsActivity,
+                                                                "Failed to upload Csv file.",
+                                                                Toast.LENGTH_LONG
+                                                        )
+                                                        .show()
+                                            }
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("DeviceDetailsActivity", "Error showing Toast", e)
+                                        }
+                                    }
+                                }
+                        )
+                    } catch (e: Exception) {
+                        android.util.Log.e("DeviceDetailsActivity", "Error in CSV generation coroutine", e)
+                        runOnUiThread {
+                            try {
+                                Toast.makeText(
+                                        this@DeviceDetailsActivity,
+                                        "Error generating CSV: ${e.message}",
+                                        Toast.LENGTH_LONG
+                                ).show()
+                            } catch (toastError: Exception) {
+                                android.util.Log.e("DeviceDetailsActivity", "Error showing error Toast", toastError)
+                            }
                         }
+                    }
+                }
             } else {
                 android.util.Log.w(
                         "DeviceDetailsActivity",
-                        "No device MAC or data points available for CSV generation"
+                        "No device MAC or data points available for Csv generation"
                 )
             }
         } catch (e: Exception) {
-            android.util.Log.e("DeviceDetailsActivity", "Error generating CSV file", e)
-            android.widget.Toast.makeText(
-                            this,
-                            "Error generating CSV file: ${e.message}",
-                            android.widget.Toast.LENGTH_LONG
-                    )
-                    .show()
+            android.util.Log.e("DeviceDetailsActivity", "Error generating Csv file", e)
+            try {
+                android.widget.Toast.makeText(
+                                this,
+                                "Error generating Csv file: ${e.message}",
+                                android.widget.Toast.LENGTH_LONG
+                        )
+                        .show()
+            } catch (toastError: Exception) {
+                android.util.Log.e("DeviceDetailsActivity", "Error showing error Toast", toastError)
+            }
         }
     }
-
-    // ensureStoragePermission removed; use requestStoragePermission instead
-
 }

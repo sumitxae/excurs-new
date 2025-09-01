@@ -136,7 +136,6 @@ class MinewBleManager @Inject constructor() {
         try {
             _isScanning.value = true
             scannedDevices.clear()
-            startRawAdvScan(context)
             mst03Manager.startScan(context, durationMs, object : OnScanDevicesResultListener<MST03Entity> {
                 override fun onScanResult(scanList: MutableList<MST03Entity>?) {
                     scanList?.let { devices ->
@@ -213,12 +212,6 @@ class MinewBleManager @Inject constructor() {
                 
                 Log.d(TAG, "Updating connection state for $macAddress: $state")
                 updateConnectionState(macAddress, state)
-
-                // When READY, attempt to hook raw data listener once per device
-                if (state == ConnectionState.READY) {
-                    Log.d(TAG, "READY reached for $macAddress, attempting raw listener registration (registered=$rawListenerRegistered)")
-                    tryRegisterRawListener(macAddress)
-                }
                 
                 // Log all current connection states for debugging
                 Log.d(TAG, "All connection states after update: ${_connectionStates.value}")

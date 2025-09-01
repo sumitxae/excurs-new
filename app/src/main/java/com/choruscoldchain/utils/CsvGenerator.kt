@@ -1,94 +1,127 @@
 package com.choruscoldchain.utils
 
-import android.content.Context
-import android.os.Environment
 import android.util.Log
-import com.choruscoldchain.data.models.TemperatureDataPoint
-import java.io.File
+import com.minew.ble.mst03.bean.HtData
+import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.*
-import android.content.ContentValues
-import android.provider.MediaStore
-import java.io.OutputStreamWriter
-import android.net.Uri
-import com.minew.ble.mst03.bean.HtData;
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody
+import okhttp3.Response
+import org.apache.poi.xssf.usermodel.XSSFWorkbook
 
 object CsvGenerator {
     private const val TAG = "CsvGenerator"
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+    private const val BASE_URL = "http://34.61.53.179:8000/v1"
+    private const val uploadUrl = "$BASE_URL/csv/upload"
 
-    /**
-     * Generates a CSV file with temperature historical data
-     * @param context Application context
-     * @param deviceMac Device MAC address
-     * @param dataPoints List of temperature data points
-     * @return File object if successful, null otherwise
-     */
-    fun generateTemperatureCsv(
-            context: Context,
-            deviceMac: String,
-            dataPoints: List<HtData>
-    ): Uri? {
-        return try {
-            Log.d(TAG, "Generating CSV for device: $deviceMac with ${dataPoints.size} data points")
-
-            // Create filename with MAC address
-            val fileName = "trips_data_${deviceMac.replace(":", "_")}.csv"
-            val resolver = context.contentResolver
-            val contentValues =
-                    ContentValues().apply {
-                        put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-                        put(MediaStore.Downloads.MIME_TYPE, "text/csv")
-                        put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                    }
-
-            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-
-            if (uri != null) {
-                resolver.openOutputStream(uri)?.use { stream ->
-                    OutputStreamWriter(stream).use { writer ->
-                        // Write header
-                        writer.append("Date&Time,Temperature,Temperature Status,Device MAC,Alarm\n")
-
-                        // Write data rows
-                        dataPoints.forEach { dataPoint ->
-                            val dateTime = formatTimestamp(dataPoint.timestamps)
-                            val temperature = dataPoint.temperature.toString()
-                            val temperatureStatus = getTemperatureStatus(dataPoint.temperature)
-                            val macAddress = dataPoint.macAddress ?: deviceMac
-                            val alarm = getAlarmStatus(dataPoint.temperature)
-
-                            val csvLine =
-                                    "$dateTime,$temperature,$temperatureStatus,$macAddress,$alarm"
-                            writer.append("$csvLine\n")
-
-                            Log.d(TAG, "CSV Line: $csvLine")
-                        }
-                    }
-                }
-                Log.d(TAG, "CSV file generated successfully in Downloads: $fileName")
-                return uri
-            } else {
-                Log.e(TAG, "Failed to create CSV in MediaStore")
-                null
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error generating CSV file", e)
-            null
+    /** Generate Excel in memory and upload it */
+    fun generateAndUploadCsv(
+    deviceMac: String,
+    dataPoints: List<HtData>,
+    callback: (Boolean) -> Unit
+) {
+    try {
+        // Validate inputs
+        if (deviceMac.isBlank()) {
+            Log.e(TAG, "Device MAC is blank")
+            callback(false)
+            return
         }
-    }
+        
+        if (dataPoints.isEmpty()) {
+            Log.e(TAG, "No data points provided")
+            callback(false)
+            return
+        }
+        
+        Log.d(TAG, "Generating CSV for device: $deviceMac with ${dataPoints.size} data points")
 
-    /** Formats timestamp to MM-DD-YYYY format */
+        // Build CSV content
+        val csvBuilder = StringBuilder()
+        csvBuilder.append("Date&Time,Temperature,Temperature Status,Device MAC,Alarm\n")
+
+        dataPoints.forEach { dataPoint ->
+            val dateTime = formatTimestamp(dataPoint.timestamps)
+            val temp = dataPoint.temperature
+            val status = getTemperatureStatus(temp)
+            val mac = dataPoint.macAddress ?: deviceMac
+            val alarm = getAlarmStatus(temp)
+
+            csvBuilder.append("$dateTime,$temp,$status,$mac,$alarm\n")
+        }
+
+        val csvBytes = csvBuilder.toString().toByteArray(Charsets.UTF_8)
+        Log.d(TAG, "CSV content generated, size: ${csvBytes.size} bytes")
+
+        // Prepare request body
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart(
+                "file",
+                "trips_data_${deviceMac.replace(":", "_")}.csv",
+                RequestBody.create("text/csv".toMediaType(), csvBytes)
+            )
+            .build()
+
+        // Build request
+        val request = Request.Builder().url(uploadUrl).post(requestBody).build()
+        Log.d(TAG, "Starting upload to: $uploadUrl")
+
+        // Execute upload
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e(TAG, "Upload failed", e)
+                callback(false)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                try {
+                    if (response.isSuccessful) {
+                        Log.d(TAG, "CSV uploaded successfully")
+                        callback(true)
+                    } else {
+                        val errorBody = response.body?.string() ?: "Unknown error"
+                        Log.e(TAG, "Upload failed: ${response.code} $errorBody")
+                        callback(false)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error processing response", e)
+                    callback(false)
+                } finally {
+                    // Ensure response body is closed
+                    response.body?.close()
+                }
+            }
+        })
+
+    } catch (e: Exception) {
+        Log.e(TAG, "Error generating/uploading CSV", e)
+        callback(false)
+    }
+}
+
+
     private fun formatTimestamp(timestamp: Long): String {
         return try {
             val dateFormat = SimpleDateFormat("MM-dd-yyyy HH:mm:ss", Locale.getDefault())
             dateFormat.format(Date(timestamp))
         } catch (e: Exception) {
-            Log.e(TAG, "Error formatting timestamp: $timestamp", e)
             "Invalid Date"
         }
     }
 
-    /** Determines temperature status based on temperature value */
     private fun getTemperatureStatus(temperature: Float): String {
         return when {
             temperature > 8.0f -> "HIGH TEMPERATURE"
@@ -97,7 +130,6 @@ object CsvGenerator {
         }
     }
 
-    /** Determines alarm status based on temperature value */
     private fun getAlarmStatus(temperature: Float): String {
         return when {
             temperature > 8.0f -> "High"
