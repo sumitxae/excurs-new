@@ -78,7 +78,7 @@ constructor(
                         _deviceInfo.value?.let { device ->
                             _deviceInfo.value = device.copy(connectionState = state)
 
-                            if (state == ConnectionState.READY) {
+                            if (state == ConnectionState.READY && _excursionEventTime.value == null) {
                                 // Add delay to allow device to stabilize after connection
                                 viewModelScope.launch {
                                     delay(2000) // 2 second delay to ensure device is fully ready

@@ -1,6 +1,12 @@
 package com.choruscoldchain.utils
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
 import android.util.Log
+import androidx.core.app.ActivityCompat
 import com.minew.ble.mst03.bean.HtData
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -25,9 +31,62 @@ object CsvGenerator {
         .build()
     private const val BASE_URL = "http://34.61.53.179:8000/v1"
     private const val uploadUrl = "$BASE_URL/csv/upload"
+    
+    /**
+     * Get the current device location
+     * @param context Application context
+     * @return Location string in format "Latitude,Longitude" or "Location unavailable"
+     */
+    private fun getDeviceLocation(context: Context): String {
+        return try {
+            // Check location permissions
+            if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+                ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "Location permission not granted")
+                return "Location permission not granted"
+            }
+            
+            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            
+            // Check if location services are enabled
+            if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) && 
+                !locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                Log.w(TAG, "Location services are disabled")
+                return "Location services disabled"
+            }
+            
+            // Try to get last known location from GPS provider
+            var location: Location? = null
+            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            }
+            
+            // If GPS location not available, try network provider
+            if (location == null && locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                location = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            }
+            
+            if (location != null) {
+                val latitude = String.format("%.6f", location.latitude)
+                val longitude = String.format("%.6f", location.longitude)
+                val accuracy = if (location.hasAccuracy()) String.format("%.1f", location.accuracy) else "Unknown"
+                val provider = location.provider ?: "Unknown"
+                Log.d(TAG, "Location obtained: $latitude, $longitude (accuracy: ${accuracy}m, provider: $provider)")
+                "$latitude, $longitude (accuracy: ${accuracy}m, provider: $provider)"
+            } else {
+                Log.w(TAG, "No location available")
+                "Location unavailable"
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting location", e)
+            "Location error: ${e.message}"
+        }
+    }
 
     /** Generate Excel in memory and upload it */
     fun generateAndUploadCsv(
+    context: Context,
     deviceMac: String,
     dataPoints: List<HtData>,
     callback: (Boolean) -> Unit
@@ -50,7 +109,24 @@ object CsvGenerator {
 
         // Build CSV content
         val csvBuilder = StringBuilder()
+        
+        // Add report header section
+        val currentTime = System.currentTimeMillis()
+        val currentTimeFormatted = formatTimestamp(currentTime)
+        val deviceLocation = getDeviceLocation(context)
+        
+        Log.d(TAG, "Device location for CSV: $deviceLocation")
+        
+        csvBuilder.append("Mobile App Reported Location,$deviceLocation\n")
+        csvBuilder.append("Mobile App Reported Time,$currentTimeFormatted\n")
+        csvBuilder.append("Mobile App Time of last received payload,$currentTimeFormatted\n")
+        csvBuilder.append("Last received payload time (RTC time),${dataPoints.lastOrNull()?.timestamps?.let { formatTimestamp(it) } ?: "N/A"}\n")
+        csvBuilder.append("\n") // Empty line for separation
+        
+        // Add data headers
         csvBuilder.append("Date&Time,Temperature,Temperature Status,Device MAC,Alarm\n")
+        
+        Log.d(TAG, "CSV headers added: Report Header, Location, App Time, Last Payload Time, RTC Time")
 
         dataPoints.forEach { dataPoint ->
             val dateTime = formatTimestamp(dataPoint.timestamps)

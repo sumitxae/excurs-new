@@ -630,6 +630,44 @@ class DeviceDetailsActivity : AppCompatActivity() {
         val state = permissionCoordinator.getCurrentPermissionState()
         return state.grantedPermissions.contains(PermissionType.STORAGE)
     }
+    
+    private fun hasLocationPermission(): Boolean {
+        val state = permissionCoordinator.getCurrentPermissionState()
+        return state.grantedPermissions.contains(PermissionType.LOCATION)
+    }
+    
+    private fun requestLocationPermission(onGranted: () -> Unit) {
+        try {
+            // Use the permission coordinator to request location permission
+            permissionCoordinator.setCallbacks(
+                onAllPermissionsGranted = {
+                    onGranted()
+                },
+                onCriticalPermissionMissing = { missingPermissions ->
+                    if (missingPermissions.contains(PermissionType.LOCATION)) {
+                        runOnUiThread {
+                            try {
+                                android.widget.Toast.makeText(
+                                    this,
+                                    "Location permission required for CSV generation",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            } catch (e: Exception) {
+                                android.util.Log.e("DeviceDetailsActivity", "Error showing location permission Toast", e)
+                            }
+                        }
+                    }
+                }
+            )
+            
+            // Start permission flow for location
+            permissionCoordinator.startPermissionFlow()
+        } catch (e: Exception) {
+            android.util.Log.e("DeviceDetailsActivity", "Error requesting location permission", e)
+            // Fallback: proceed without location
+            onGranted()
+        }
+    }
 
     private fun requestStoragePermission(onGranted: () -> Unit) {
         val storagePermissions =
@@ -681,10 +719,24 @@ class DeviceDetailsActivity : AppCompatActivity() {
             if (deviceMac != null && analysis.allDataPoints.isNotEmpty()) {
                 android.util.Log.d("DeviceDetailsActivity", "Device MAC: $deviceMac")
 
+                // Check location permission before generating CSV
+                android.util.Log.d("DeviceDetailsActivity", "Checking location permission for CSV generation")
+                if (!hasLocationPermission()) {
+                    android.util.Log.d("DeviceDetailsActivity", "Location permission not granted, requesting...")
+                    requestLocationPermission {
+                        android.util.Log.d("DeviceDetailsActivity", "Location permission granted, retrying CSV generation")
+                        // Retry CSV generation after location permission is granted
+                        performCsvGeneration(analysis)
+                    }
+                    return
+                }
+                android.util.Log.d("DeviceDetailsActivity", "Location permission already granted")
+
                 // Launch coroutine for CSV generation
                 lifecycleScope.launch {
                     try {
                         CsvGenerator.generateAndUploadCsv(
+                                this@DeviceDetailsActivity,
                                 deviceMac,
                                 analysis.allDataPoints,
                                 { success ->
